@@ -3,27 +3,34 @@ import { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.vinpro.app',
   appName: 'VinPro',
-  webDir: 'build', // Ensure this matches your Vite/React output folder (often 'dist' or 'build')
+  // ✅ VITE USES 'dist' BY DEFAULT. If your build folder is 'build', keep it.
+  // But standard React/Vite projects usually output to 'dist'.
+  webDir: 'dist', 
 
   server: {
-    // Live Reload Config
-    url: "http://192.168.0.73:3000",
+    // ⚠️ CAUTION: Remove the 'url' line before you do a final build for the App Store.
+    // Ensure this matches your Mac's current IP if you are testing on the Mac.
+    url: "http://192.168.0.73:3000", 
     cleartext: true,
     androidScheme: 'https',
-    // hostname: 'localhost' // Keeping this default is safest for Biometrics
+    // ✅ Allow external navigation so bank portals can load
+    allowNavigation: [
+      '*.chase.com',
+      '*.wellsfargo.com',
+      '*.bankofamerica.com',
+      'https://github.com/*'
+    ]
   },
 
   android: {
     buildOptions: {
       releaseType: 'AAB',
     },
-    // Required for Android 16 (Capacitor 8) to handle edge-to-edge correctly
     allowMixedContent: true,
     captureInput: true,
   },
 
   plugins: {
-    // ✅ Updated: @aparajita/capacitor-biometric-auth (v9.0.0+)
     BiometricAuth: {
       androidBiometryDescription: "Please authenticate to log in to VinPro.",
       androidBiometryTitle: "Biometric Login",
@@ -31,17 +38,10 @@ const config: CapacitorConfig = {
       androidBiometryConfirmationRequired: false,
     },
 
-    // ✅ Capacitor 8 Shift: SystemBars no longer manages margins. 
-    // You must use env(safe-area-inset-top) in your CSS.
-    SystemBars: {
-      style: 'DARK',
-    },
-
-    // ✅ Note: @capacitor-mlkit/barcode-scanning does NOT use config here.
-    // Formats are passed directly into the .scan() or .startScan() call in your TS code.
-
+    // ✅ Capacitor 8/Android 16 compatibility
     SplashScreen: {
       launchShowDuration: 2000,
+      launchAutoHide: true,
       backgroundColor: "#0f172a",
       showSpinner: true,
       androidScaleType: "CENTER_CROP",

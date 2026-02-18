@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from "react";
 import { Phone, Globe, Landmark, ExternalLink, Search, X, Filter } from "lucide-react";
-// ✅ FIXED: Direct Capacitor Haptics and consistent 2026 Android 16 naming
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
+// ✅ IMPORT THE BROWSER PLUGIN
+import { Browser } from "@capacitor/browser";
 import bankData from "../data/banks.json";
 
 const FinancingBanksPage = () => {
@@ -22,14 +23,19 @@ const FinancingBanksPage = () => {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [searchQuery, activeTab]);
 
+  // ✅ FIXED: Using Capacitor Browser for reliable external navigation
   const handlePortalNavigation = async (url) => {
-    if (!url || url === "#") return;
+    if (!url || url === "#" || url === "") return;
     
     try {
+      // Provide physical feedback
       await Haptics.impact({ style: ImpactStyle.Medium });
-      // ✅ FIXED: Ensures the external portal opens in the system browser, not inside VinPro
-      window.open(url, '_system'); 
+      
+      // Open in the system's default browser
+      await Browser.open({ url: url });
     } catch (err) {
+      console.error("Browser error:", err);
+      // Fallback for web testing
       window.open(url, '_blank');
     }
   };
