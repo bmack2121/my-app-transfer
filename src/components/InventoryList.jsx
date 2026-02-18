@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import VehicleCard from './VehicleCard';
 
-const InventoryList = ({ vehicles = [] }) => {
+const InventoryList = ({ vehicles = [], isDark = true }) => {
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('newest'); // 'newest' or 'aging'
@@ -19,7 +19,7 @@ const InventoryList = ({ vehicles = [] }) => {
   const processedVehicles = useMemo(() => {
     return vehicles
       .filter(v => {
-        const matchesStatus = filter === 'all' || v.status === filter;
+        const matchesStatus = filter === 'all' || v.status?.toLowerCase() === filter.toLowerCase();
         const search = searchTerm.toLowerCase();
         const matchesSearch = 
           v.make?.toLowerCase().includes(search) ||
@@ -32,30 +32,40 @@ const InventoryList = ({ vehicles = [] }) => {
       .sort((a, b) => {
         const dateA = new Date(a.createdAt);
         const dateB = new Date(b.createdAt);
+        // Aging puts the oldest (earliest date) at the top
         return sortBy === 'aging' ? dateA - dateB : dateB - dateA;
       });
   }, [vehicles, filter, searchTerm, sortBy]);
 
   return (
     <div className="space-y-6">
-      {/* 2. Controls Section */}
-      <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+      {/* 📊 Controls & Search */}
+      <div className={`${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'} p-5 rounded-[2.5rem] border shadow-xl space-y-4`}>
+        <div className="flex items-center justify-between mb-2">
+            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">Filter Results</h3>
+            <span className="text-[10px] font-black text-blue-500 uppercase">{processedVehicles.length} Units Found</span>
+        </div>
+
         <input 
           type="text"
-          placeholder="Search by Make, Model, VIN or Stock #..."
+          placeholder="Search Make, Model, VIN or Stock..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500"
+          className={`w-full border-none rounded-2xl py-4 px-5 text-sm focus:ring-2 focus:ring-blue-600 transition-all ${
+            isDark ? 'bg-slate-950 text-white placeholder:text-slate-600' : 'bg-slate-50 text-slate-900'
+          }`}
         />
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex gap-2">
-            {['all', 'available', 'hold'].map((status) => (
+        <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+          <div className="flex gap-2 p-1 bg-slate-950/50 rounded-xl">
+            {['all', 'available', 'hold', 'sold'].map((status) => (
               <button
                 key={status}
                 onClick={() => setFilter(status)}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
-                  filter === status ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"
+                className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                  filter === status 
+                    ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" 
+                    : "text-slate-500 hover:text-slate-300"
                 }`}
               >
                 {status}
@@ -66,7 +76,9 @@ const InventoryList = ({ vehicles = [] }) => {
           <select 
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
-            className="bg-slate-50 border-none text-[10px] font-black uppercase tracking-widest rounded-lg py-1.5 px-3 focus:ring-0"
+            className={`border-none text-[9px] font-black uppercase tracking-widest rounded-xl py-2 px-4 focus:ring-0 cursor-pointer ${
+                isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-700'
+            }`}
           >
             <option value="newest">Recent Arrivals</option>
             <option value="aging">Oldest Inventory</option>
@@ -74,26 +86,36 @@ const InventoryList = ({ vehicles = [] }) => {
         </div>
       </div>
 
-      {/* 3. Results Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-20">
+      {/* 🚗 Results Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-24">
         {processedVehicles.length > 0 ? (
           processedVehicles.map((v) => {
             const days = getDaysOnLot(v.createdAt);
+            const isStale = days > 30 && v.status === 'available';
+            
             return (
-              <div key={v._id || v.vin} className="relative">
-                {/* ✅ Stale Unit Badge (Over 30 days) */}
-                {days > 30 && v.status === 'available' && (
-                  <div className="absolute -top-2 -left-2 z-10 bg-orange-500 text-white text-[10px] font-black px-2 py-1 rounded-md shadow-lg animate-pulse">
+              <div key={v._id || v.vin} className="relative group">
+                {/* ✅ STALE BADGE */}
+                {isStale && (
+                  <div className="absolute -top-3 left-6 z-20 bg-rose-600 text-white text-[9px] font-black px-3 py-1.5 rounded-full shadow-xl animate-pulse ring-4 ring-slate-950">
                     STALE: {days} DAYS
                   </div>
                 )}
-                <VehicleCard vehicle={v} aging={days} />
+                
+                <VehicleCard 
+                    vehicle={v} 
+                    aging={days} 
+                    isDark={isDark}
+                />
               </div>
             );
           })
         ) : (
-          <div className="col-span-full py-10 text-center text-slate-400 text-sm">
-            No vehicles found matching your criteria.
+          <div className="col-span-full py-20 text-center space-y-4">
+            <div className="text-4xl">🔎</div>
+            <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">
+                No matching units in current inventory
+            </p>
           </div>
         )}
       </div>

@@ -4,11 +4,11 @@ import axiosClient from '../api/axiosClient';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 
 const VehicleDetailPage = () => {
-  // ✅ FIXED: Must match the ":id" defined in App.js
   const { id } = useParams(); 
   const navigate = useNavigate();
   
   const [vehicle, setVehicle] = useState(null);
+  const [marketData, setMarketData] = useState(null); // 📈 New MarketCheck State
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -26,19 +26,22 @@ const VehicleDetailPage = () => {
   const fetchVehicleDetails = async () => {
     try {
       setLoading(true);
-      // ✅ Using 'id' from useParams
       const res = await axiosClient.get(`/inventory/${id}`);
       const data = res.data;
       
       setVehicle(data);
       setPrice(data.price?.toString() || '');
       setMileage(data.mileage?.toString() || '');
-      setStatus(data.status || '');
+      setStatus(data.status || 'available');
+
+      // 🔍 Fetch MarketCheck Insights if VIN is available
+      if (data.vin) {
+        const marketRes = await axiosClient.get(`/marketcheck/v2/predict/${data.vin}`);
+        setMarketData(marketRes.data);
+      }
     } catch (err) {
-      console.error("Fetch error:", err);
-      try {
-        await Haptics.notification({ type: NotificationType.Error });
-      } catch (e) {}
+      console.error("Sync Error:", err);
+      try { await Haptics.notification({ type: NotificationType.Error }); } catch (e) {}
     } finally {
       setLoading(false);
     }
@@ -47,7 +50,7 @@ const VehicleDetailPage = () => {
   const handleUpdate = async () => {
     setSaving(true);
     try {
-      await Haptics.impact({ style: ImpactStyle.Medium });
+      try { await Haptics.impact({ style: ImpactStyle.Medium }); } catch (e) {}
       
       await axiosClient.put(`/inventory/${id}`, {
         price: Number(price),
@@ -55,107 +58,135 @@ const VehicleDetailPage = () => {
         status: status
       });
       
-      try {
-        await Haptics.notification({ type: NotificationType.Success });
-      } catch (e) {}
-      
+      try { await Haptics.notification({ type: NotificationType.Success }); } catch (e) {}
       navigate('/inventory'); 
     } catch (err) {
-      try {
-        await Haptics.notification({ type: NotificationType.Error });
-      } catch (e) {}
+      try { await Haptics.notification({ type: NotificationType.Error }); } catch (e) {}
       console.error("Update failed:", err);
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex-1 bg-slate-950 flex justify-center items-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-
-  // ✅ Safety Check: Prevent crash if vehicle wasn't found
-  if (!vehicle) {
-    return (
-      <div className="flex-1 bg-slate-950 p-6 text-center pt-20">
-        <p className="text-rose-500 font-black uppercase">Vehicle Not Found</p>
-        <button onClick={() => navigate('/inventory')} className="mt-4 text-blue-500 underline">Return to Inventory</button>
-      </div>
-    );
-  }
+  if (loading) return <LoadingSpinner />;
 
   return (
-    <div className="flex-1 bg-slate-950 p-6 overflow-y-auto pt-safe">
-      <header className="mb-8">
-        <h1 className="text-3xl font-black text-white uppercase leading-none italic tracking-tighter">
+    <div className="flex-1 bg-slate-950 p-6 overflow-y-auto pt-safe pb-24">
+      {/* 🏷️ Header */}
+      <header className="mb-10">
+        <div className="flex items-center gap-2 mb-2">
+           <span className="bg-blue-600/10 text-blue-500 text-[9px] font-black px-2 py-1 rounded uppercase tracking-widest">
+             {vehicle.stockNumber || 'No Stock #'}
+           </span>
+           <span className={`text-[9px] font-black px-2 py-1 rounded uppercase tracking-widest ${status === 'sold' ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+             {status}
+           </span>
+        </div>
+        <h1 className="text-4xl font-black text-white uppercase leading-none italic tracking-tighter">
           {vehicle.year} {vehicle.make}
         </h1>
-        <p className="text-lg text-slate-400 font-bold mt-2 uppercase">
+        <p className="text-xl text-slate-500 font-bold uppercase italic tracking-tighter mt-1">
           {vehicle.model} {vehicle.trim}
         </p>
       </header>
 
-      <div className="space-y-6">
+      {/* 📈 MARKET INTELLIGENCE SECTION */}
+      {marketData && (
+        <div className="mb-8 p-6 bg-blue-600/5 border border-blue-500/20 rounded-[2.5rem] shadow-glow">
+          <h3 className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+             <span className="animate-pulse">📡</span> MarketCheck Insights
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-slate-900/50 p-4 rounded-2xl">
+              <p className="text-[8px] text-slate-500 font-black uppercase mb-1">Market Avg</p>
+              <p className="text-lg font-black text-white">${marketData.mean_price?.toLocaleString()}</p>
+            </div>
+            <div className="bg-slate-900/50 p-4 rounded-2xl">
+              <p className="text-[8px] text-slate-500 font-black uppercase mb-1">Rank</p>
+              <p className="text-lg font-black text-emerald-500">{marketData.rank || 'Top 10%'}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-8">
+        {/* Listing Price */}
         <div className="group">
-          <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">
-            Listing Price ($)
-          </label>
+          <label className="text-[10px] font-black uppercase text-slate-500 mb-3 block tracking-[0.2em] ml-1">Listing Price ($)</label>
           <input
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             type="number"
-            inputMode="numeric"
-            className="w-full bg-slate-900 text-white p-5 rounded-2xl font-black text-xl border border-slate-800 focus:border-blue-500 outline-none transition-all shadow-inner"
+            inputMode="decimal"
+            className="w-full bg-slate-900 text-white p-6 rounded-3xl font-black text-2xl border border-slate-800 focus:border-blue-500 outline-none transition-all shadow-2xl"
           />
         </div>
 
+        {/* Odometer */}
         <div className="group">
-          <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">
-            Current Mileage
-          </label>
+          <label className="text-[10px] font-black uppercase text-slate-500 mb-3 block tracking-[0.2em] ml-1">Odometer</label>
           <input
             value={mileage}
             onChange={(e) => setMileage(e.target.value)}
             type="number"
             inputMode="numeric"
-            className="w-full bg-slate-900 text-white p-5 rounded-2xl font-black text-xl border border-slate-800 focus:border-blue-500 outline-none transition-all shadow-inner"
+            className="w-full bg-slate-900 text-white p-6 rounded-3xl font-black text-2xl border border-slate-800 focus:border-blue-500 outline-none transition-all shadow-2xl"
           />
         </div>
 
-        {/* 🚗 Read-Only Specs Grid */}
-        <div className="grid grid-cols-3 bg-slate-900 p-6 rounded-[2rem] border border-slate-800 mt-4 shadow-2xl">
-          <div className="flex flex-col items-center border-r border-slate-800">
-            <span className="text-[8px] text-slate-500 font-black uppercase mb-1">Drive</span>
-            <span className="text-white font-bold text-sm uppercase">{vehicle.driveType || 'N/A'}</span>
+        {/* Status */}
+        <div className="group">
+          <label className="text-[10px] font-black uppercase text-slate-500 mb-3 block tracking-[0.2em] ml-1">Status</label>
+          <div className="grid grid-cols-2 gap-3">
+            {['available', 'hold', 'sold', 'trade'].map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatus(s)}
+                className={`p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest border transition-all ${
+                  status === s ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20' : 'bg-slate-900 border-slate-800 text-slate-500'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
           </div>
-          <div className="flex flex-col items-center border-r border-slate-800">
-            <span className="text-[8px] text-slate-500 font-black uppercase mb-1">Fuel</span>
-            <span className="text-white font-bold text-sm uppercase">{vehicle.fuelType || 'N/A'}</span>
-          </div>
-          <div className="flex flex-col items-center">
-            <span className="text-[8px] text-slate-500 font-black uppercase mb-1">Engine</span>
-            <span className="text-white font-bold text-[10px] text-center uppercase leading-tight">{vehicle.engine || 'N/A'}</span>
-          </div>
+        </div>
+
+        {/* Technical Badges */}
+        <div className="grid grid-cols-3 bg-slate-900/50 p-6 rounded-[2.5rem] border border-slate-800/50 shadow-inner">
+          <TechnicalBadge label="Drive" value={vehicle.driveType} />
+          <TechnicalBadge label="Fuel" value={vehicle.fuelType} border={true} />
+          <TechnicalBadge label="Engine" value={vehicle.engine} border={true} />
         </div>
       </div>
 
+      {/* Save Button */}
       <button 
         onClick={handleUpdate}
         disabled={saving}
-        className={`w-full p-6 rounded-[2rem] mt-10 shadow-2xl font-black uppercase tracking-widest transition-all active:scale-95 ${
-          saving ? 'bg-slate-700 text-slate-400' : 'bg-blue-600 text-white hover:bg-blue-500'
+        className={`w-full p-7 rounded-[2.5rem] mt-12 shadow-2xl font-black uppercase tracking-[0.3em] transition-all active:scale-95 ${
+          saving ? 'bg-slate-800 text-slate-600' : 'bg-blue-600 text-white'
         }`}
       >
-        {saving ? 'Syncing...' : 'Save Unit Changes'}
+        {saving ? 'Syncing...' : 'Commit Changes'}
       </button>
 
       <div className="h-20" />
     </div>
   );
 };
+
+const LoadingSpinner = () => (
+  <div className="flex-1 bg-slate-950 flex justify-center items-center h-screen">
+    <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+  </div>
+);
+
+const TechnicalBadge = ({ label, value, border }) => (
+  <div className={`flex flex-col items-center ${border ? 'border-l border-slate-800' : ''}`}>
+    <span className="text-[8px] text-slate-600 font-black uppercase mb-1 tracking-widest">{label}</span>
+    <span className="text-white font-bold text-[10px] uppercase truncate px-2">{value || 'N/A'}</span>
+  </div>
+);
 
 export default VehicleDetailPage;

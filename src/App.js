@@ -19,9 +19,9 @@ import Unauthorized from "./pages/Unauthorized";
 import Dashboard from "./pages/Dashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import CustomerPage from "./pages/CustomerPage";
-import CustomerDetailPage from "./pages/CustomerDetailPage"; // ✅ Added
+import CustomerDetailPage from "./pages/CustomerDetailPage";
 import InventoryPage from "./pages/InventoryPage";
-import VehicleDetailPage from "./pages/VehicleDetailPage"; // ✅ Added
+import VehicleDetailPage from "./pages/VehicleDetailPage";
 import DealDeskPage from "./pages/DealDeskPage";
 import TaskPage from "./pages/TaskPage";
 import UserPage from "./pages/UserPage";
@@ -33,23 +33,36 @@ import LeaseCalculator from "./pages/LeaseCalculator";
 import LeadIntakePage from './pages/LeadIntakePage';
 
 /**
- * Layout: Handles "Edge-to-Edge" UI.
+ * Layout: Handles "Edge-to-Edge" UI and Mobile Safe Areas.
+ * Integrates Global Logout behavior for shared devices.
  */
 const Layout = ({ children }) => {
   const location = useLocation();
-  const noNavbarPaths = ["/login", "/register", "/forgot-password", "/reset-password", "/vin-scanner", "/lead-intake"];
+  
+  // ✅ Routes that should be immersive (Camera, Forms, Login)
+  const noNavbarPaths = [
+    "/login", 
+    "/register", 
+    "/forgot-password", 
+    "/reset-password", 
+    "/vin-scanner", 
+    "/vin-result",
+    "/lead-intake"
+  ];
   
   const isFullScreen = noNavbarPaths.some((path) => location.pathname.startsWith(path));
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col overflow-x-hidden text-slate-50">
+    <div className={`min-h-screen bg-slate-950 flex flex-col overflow-x-hidden text-slate-50`}>
+      {/* Navbar only shows on standard data/dash pages */}
       {!isFullScreen && <Navbar />}
       
       <main 
         className="flex-grow flex flex-col"
         style={{
+          // ✅ Immersive view removes all padding for viewfinder coverage
           paddingTop: isFullScreen ? "0" : "calc(4.5rem + env(safe-area-inset-top, 0px))",
-          paddingBottom: "env(safe-area-inset-bottom, 20px)",
+          paddingBottom: isFullScreen ? "0" : "env(safe-area-inset-bottom, 20px)",
           paddingLeft: "env(safe-area-inset-left, 0px)",
           paddingRight: "env(safe-area-inset-right, 0px)"
         }}
@@ -66,42 +79,44 @@ const App = () => {
       <Router>
         <Layout>
           <Routes>
+            {/* Entry Point */}
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-            {/* Public Routes */}
+            {/* Public Access */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
             <Route path="/unauthorized" element={<Unauthorized />} />
 
-            {/* Protected Routes Block */}
+            {/* 🛡️ Protected VinPro Engine Block */}
             <Route element={<PrivateRoute />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/admin-control" element={<AdminDashboard />} />
               <Route path="/lease-calculator" element={<LeaseCalculator />} />
               
-              {/* Inventory Management */}
+              {/* Inventory Control */}
               <Route path="/inventory" element={<InventoryPage />} />
-              <Route path="/inventory/:id" element={<VehicleDetailPage />} /> {/* ✅ FIXED REDIRECT */}
+              <Route path="/inventory/:id" element={<VehicleDetailPage />} />
               
-              {/* CRM / Customer Management */}
+              {/* CRM & Pipeline */}
               <Route path="/customers" element={<CustomerPage />} />
-              <Route path="/customers/:id" element={<CustomerDetailPage />} /> {/* ✅ ADDED */}
+              <Route path="/customers/:id" element={<CustomerDetailPage />} />
               
+              {/* Desking & Tools */}
               <Route path="/deals" element={<DealDeskPage />} />
               <Route path="/tasks" element={<TaskPage />} />
               <Route path="/team" element={<UserPage />} />
               <Route path="/financing-banks" element={<FinancingBanksPage />} />
               
-              {/* Sales Tools */}
+              {/* Specialized Sales Weapons */}
               <Route path="/lead-intake" element={<LeadIntakePage />} />
               <Route path="/vin-scanner" element={<VinScannerPage />} />
               <Route path="/vin-result/:vin" element={<VinResultPage />} />
               <Route path="/carfax" element={<CarfaxPage />} />
             </Route>
 
-            {/* Catch-all Redirect */}
+            {/* Global Redirect */}
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </Layout>

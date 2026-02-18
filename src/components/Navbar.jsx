@@ -2,6 +2,7 @@ import React, { useState, useContext } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { useDarkMode } from '../hooks/useDarkMode';
+import { Haptics, NotificationType, ImpactStyle } from '@capacitor/haptics';
 import { MdDashboard, MdOutlineContactPhone } from "react-icons/md";
 import { FaCarSide, FaClipboardList, FaUserTie, FaUniversity, FaFileAlt, FaUserPlus } from "react-icons/fa";
 import { RiMoneyDollarCircleFill } from "react-icons/ri";
@@ -14,14 +15,26 @@ const Navbar = () => {
   useDarkMode();
   const location = useLocation();
 
-  const handleLogout = () => {
-    // Clear all auth-related storage to prevent ghost sessions
-    localStorage.removeItem('token');
-    localStorage.removeItem('user'); 
-    setAuth({ user: null, token: null, isAuthenticated: false });
+  const handleLogout = async () => {
+    try {
+      // 1. Physical feedback for the salesman
+      try { await Haptics.notification({ type: NotificationType.Success }); } catch (e) {}
+
+      // 2. Wipe storage
+      localStorage.removeItem('token');
+      localStorage.removeItem('user'); 
+
+      // 3. Reset React Context
+      setAuth({ user: null, token: null, isAuthenticated: false });
+
+      // 4. Force hard-reload to Login to clear all sensitive cache
+      window.location.href = '/login';
+    } catch (err) {
+      console.error("Logout failed:", err);
+      window.location.href = '/login'; // Fallback
+    }
   };
 
-  // ✅ FIXED: Changed path from '/crm' to '/customers' to match App.tsx routes
   const navLinks = [
     { name: 'Dashboard', path: '/dashboard', icon: <MdDashboard /> },
     { name: 'Inventory', path: '/inventory', icon: <FaCarSide /> },
@@ -38,28 +51,38 @@ const Navbar = () => {
     { name: 'Team', path: '/team', icon: <FaUserTie /> },
   ];
 
-  const NavItem = ({ link, isMobile = false }) => (
-    <Link
-      to={link.path}
-      onClick={() => isMobile && setOpen(false)}
-      className={`flex items-center gap-2 px-3 py-2.5 rounded-xl transition-all font-bold text-[10px] uppercase tracking-widest ${
-        location.pathname === link.path
-          ? 'bg-blue-600 text-white shadow-glow'
-          : 'text-slate-400 hover:text-white hover:bg-white/5'
-      }`}
-    >
-      <span className="text-base">{link.icon}</span>
-      {link.name}
-    </Link>
-  );
+  const NavItem = ({ link, isMobile = false }) => {
+    const isActive = location.pathname === link.path || (link.path !== '/dashboard' && location.pathname.startsWith(link.path));
+    
+    return (
+      <Link
+        to={link.path}
+        onClick={async () => {
+          if (isMobile) setOpen(false);
+          try { await Haptics.impact({ style: ImpactStyle.Light }); } catch (e) {}
+        }}
+        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl transition-all font-bold text-[10px] uppercase tracking-widest ${
+          isActive
+            ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+            : 'text-slate-400 hover:text-white hover:bg-white/5'
+        }`}
+      >
+        <span className="text-base">{link.icon}</span>
+        {link.name}
+      </Link>
+    );
+  };
 
   return (
-    <nav className="fixed top-0 inset-x-0 z-[100] pt-safe bg-slate-950/80 backdrop-blur-xl border-b border-white/5 px-6">
+    <nav className="fixed top-0 inset-x-0 z-[100] bg-slate-950/80 backdrop-blur-xl border-b border-white/5 px-6">
+      {/* Safe Area Inset Top for Mobile Status Bars */}
+      <div style={{ height: 'env(safe-area-inset-top, 0px)' }} />
+      
       <div className="max-w-7xl mx-auto flex items-center justify-between h-16">
 
         {/* Branding */}
         <Link to="/dashboard" className="flex items-center gap-2 group">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-glow font-black italic transition-transform group-active:scale-90">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-blue-600/20 font-black italic transition-transform group-active:scale-90">
             V
           </div>
           <span className="font-heading text-lg font-black tracking-tighter text-white uppercase italic">
@@ -78,14 +101,17 @@ const Navbar = () => {
         <div className="flex items-center gap-3">
           <button
             onClick={handleLogout}
-            className="hidden md:block text-[9px] font-black uppercase text-rose-500 border border-rose-500/20 hover:bg-rose-500/10 px-3 py-1.5 rounded-lg transition-colors"
+            className="hidden md:block text-[9px] font-black uppercase text-rose-500 border border-rose-500/20 hover:bg-rose-500/10 px-4 py-2 rounded-xl transition-colors"
           >
             Exit Session
           </button>
 
           <button
             className="xl:hidden text-white text-xl p-2.5 bg-slate-900 rounded-xl border border-white/5 active:scale-90 transition-transform"
-            onClick={() => setOpen(!open)}
+            onClick={async () => {
+              setOpen(!open);
+              try { await Haptics.impact({ style: ImpactStyle.Medium }); } catch (e) {}
+            }}
           >
             {open ? <HiX /> : <HiMenu />}
           </button>
@@ -94,19 +120,20 @@ const Navbar = () => {
 
       {/* Mobile Mega-Menu */}
       {open && (
-        <div className="xl:hidden fixed inset-x-0 top-[calc(4rem+var(--safe-area-top))] bg-slate-950 border-b border-white/10 p-6 shadow-2xl animate-in slide-in-from-top duration-300">
+        <div className="xl:hidden fixed inset-x-0 top-[calc(4rem+env(safe-area-inset-top,0px))] bg-slate-950 border-b border-white/10 p-6 shadow-2xl animate-in slide-in-from-top duration-300 max-h-[80vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-2">
             {[...navLinks, ...adminLinks].map(link => (
               <NavItem key={link.path} link={link} isMobile={true} />
             ))}
             <button
               onClick={handleLogout}
-              className="col-span-2 mt-6 p-4 bg-rose-600/10 text-rose-500 rounded-2xl font-black uppercase text-[10px] tracking-widest border border-rose-500/20"
+              className="col-span-2 mt-6 p-5 bg-rose-600/10 text-rose-500 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] border border-rose-500/20 active:bg-rose-600/20 transition-all"
             >
               Terminate Session
             </button>
           </div>
-          <div className="h-safe-bottom mt-4" />
+          {/* Ensure space for bottom home bars */}
+          <div style={{ height: 'env(safe-area-inset-bottom, 20px)' }} />
         </div>
       )}
     </nav>
