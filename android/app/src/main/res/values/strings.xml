@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">VinPro</string>
+    <string name="title_activity_main">VinPro</string>
+    <string name="package_name">com.vinpro.app</string>
+    <string name="custom_url_scheme">com.vinpro.app</string>
+</resources>

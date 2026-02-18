@@ -1,0 +1,66 @@
+diff --git a/node_modules/@capacitor/filesystem/android/build.gradle b/node_modules/@capacitor/filesystem/android/build.gradle
+index b2885ee..6f4308e 100644
+--- a/node_modules/@capacitor/filesystem/android/build.gradle
++++ b/node_modules/@capacitor/filesystem/android/build.gradle
+@@ -12,17 +12,22 @@ buildscript {
+         mavenCentral()
+     }
+     dependencies {
+-        classpath 'com.android.tools.build:gradle:8.7.1'
+         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+     }
+ }
+ 
++// ✅ Apply plugins directly — no afterEvaluate, no plugins {}
+ apply plugin: 'com.android.library'
+-apply plugin: 'kotlin-android'
++
++// ✅ Guard Kotlin plugin to avoid duplicate registration
++if (!plugins.hasPlugin('kotlin-android')) {
++    apply plugin: 'kotlin-android'
++}
+ 
+ android {
+     namespace "com.capacitorjs.plugins.filesystem"
+     compileSdk project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 35
++
+     defaultConfig {
+         minSdkVersion project.hasProperty('minSdkVersion') ? rootProject.ext.minSdkVersion : 23
+         targetSdkVersion project.hasProperty('targetSdkVersion') ? rootProject.ext.targetSdkVersion : 35
+@@ -30,15 +35,18 @@ android {
+         versionName "1.0"
+         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+     }
++
+     buildTypes {
+         release {
+             minifyEnabled false
+             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+         }
+     }
+-    lintOptions {
+-        abortOnError false
++
++    lint {
++        abortOnError = false
+     }
++
+     compileOptions {
+         sourceCompatibility JavaVersion.VERSION_21
+         targetCompatibility JavaVersion.VERSION_21
+@@ -54,14 +62,12 @@ repositories {
+     mavenCentral()
+ }
+ 
+-
+ dependencies {
+     implementation fileTree(dir: 'libs', include: ['*.jar'])
+     implementation "io.ionic.libs:ionfilesystem-android:1.0.0"
+     implementation project(':capacitor-android')
+     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+-
+-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
++    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4"
+ 
+     testImplementation "junit:junit:$junitVersion"
+     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

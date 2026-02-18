@@ -1,0 +1,24 @@
+/* If using a CSS file, otherwise use the Tailwind classes below */
+.task-card {
+  @apply bg-app-surface border border-app-border p-5 mb-3 rounded-xl2 
+         shadow-card transition-all duration-300 relative overflow-hidden;
+}
+
+/* ⚡ The "Hot Lead" Indicator (High Priority) */
+.task-card.priority-urgent {
+  @apply border-l-4 border-l-performance shadow-glow;
+}
+
+/* ✅ The "Done" State */
+.task-card.status-completed {
+  @apply opacity-50 bg-app-bg border-transparent grayscale-[0.5];
+}
+
+.task-card.status-completed .task-text {
+  @apply line-through text-slate-500;
+}
+
+/* 🕒 The "Overdue" Pulse */
+.task-card.is-overdue {
+  @apply border-performance/50 animate-pulse;
+}

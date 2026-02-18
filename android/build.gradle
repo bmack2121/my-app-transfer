@@ -1,0 +1,44 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+    ext {
+        // ✅ Version alignment for 2026 standards (Android 16 / Baklava)
+        buildToolsVersion = "36.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 36
+        targetSdkVersion = 36
+        
+        // ✅ Required for Android 15/16 16KB page alignment support
+        ndkVersion = "28.0.12433566" 
+        
+        // ✅ UPGRADE: Kotlin 2.2.20 is the stable standard for Capacitor 8 in 2026
+        // This officially fixes the 'padStart' and 'compileDebugKotlin' issues
+        kotlinVersion = "2.2.20" 
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        // ✅ Mandatory AGP 8.13.0 for API 36 support
+        classpath("com.android.tools.build:gradle:8.13.0")
+        
+        // ✅ Updated Google Services for 2026 compatibility
+        classpath("com.google.gms:google-services:4.4.4")
+        
+        // ✅ Uses the modern Kotlin 2.2.20 plugin
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+// Clean task to ensure a fresh environment for the 16KB build
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

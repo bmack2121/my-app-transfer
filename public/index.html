@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    
+    <meta 
+      name="viewport" 
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no, shrink-to-fit=no" 
+    />
+
+    <meta name="theme-color" content="#020617" />
+    
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <meta name="description" content="VinPro - Professional Dealership Management & VIN Scanning" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    
+    <title>VinPro</title>
+
+    <style>
+      /* ✅ Prevents white flash on load and handles the base background for Edge-to-Edge */
+      html, body {
+        background-color: #020617;
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        overflow: hidden; /* Recommended for Capacitor to prevent "rubber-banding" */
+      }
+
+      #root {
+        height: 100%;
+        width: 100%;
+        overflow-y: auto; /* Allows scrolling inside the React app container */
+        -webkit-overflow-scrolling: touch;
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    
+    <div id="root"></div>
+  </body>
+</html>

@@ -1,0 +1,82 @@
+/* Reset some default styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  /* Updated to a dark theme consistent with your VinPro UI */
+  background-color: #020617; 
+  color: #f8fafc;
+  line-height: 1.6;
+  transition: background-color 0.2s ease;
+}
+
+/* -------------------------------------------
+ * VINPRO NATIVE SCANNER BRIDGE
+ * This is the fix for the "Black Screen" issue
+ * ----------------------------------------- */
+
+/* When scanning, we must make the app invisible */
+body.scanner-active, 
+body.scanner-active #root,
+body.scanner-active main {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Force transparency on any container with a background color */
+body.scanner-active .min-h-screen,
+body.scanner-active .bg-slate-900,
+body.scanner-active .bg-slate-950 {
+  background-color: transparent !important;
+}
+
+/* -------------------------------------------
+ * STANDARD UI STYLES
+ * ----------------------------------------- */
+
+input, button, select, textarea {
+  font-family: inherit;
+  font-size: 1rem;
+  padding: 12px;
+  margin: 8px 0;
+  border-radius: 12px;
+  outline: none;
+}
+
+/* The "Authorize" and "Scan" buttons */
+button {
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+button:hover {
+  background-color: #2563eb;
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+a {
+  color: #60a5fa;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Utility for the spinner and status messages */
+.shadow-glow {
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+}

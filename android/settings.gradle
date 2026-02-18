@@ -1,0 +1,34 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "android"
+
+include ':app'
+include ':capacitor-android'
+
+// 1. Point to the Capacitor Android library
+project(':capacitor-android').projectDir = new File('../node_modules/@capacitor/android/capacitor')
+
+// 2. 🚀 MANUAL FIX: Explicitly include the missing plugins module
+include ':capacitor-cordova-android-plugins'
+project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins')
+
+// 3. Load other plugins (keep this line!)
+try {
+    apply from: 'capacitor.settings.gradle'
+} catch (Exception e) {
+    println "Warning: capacitor.settings.gradle not found. Run 'npx cap sync'."
+}

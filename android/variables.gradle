@@ -1,0 +1,36 @@
+ext {
+    // ✅ Kotlin 2.3.10: Stable as of Feb 5, 2026
+    kotlin_version = '2.3.10'
+    
+    // ✅ SDK 36: Stable target for Capacitor 8.1
+    minSdkVersion = 24
+    compileSdkVersion = 36
+    targetSdkVersion = 36
+
+    // ✅ AndroidX Stable Versions (Feb 2026)
+    // Note: Version 1.12.4 for Activity was released Feb 11, 2026
+    androidxActivityVersion = '1.12.4' 
+    androidxAppCompatVersion = '1.7.1'
+    androidxCoordinatorLayoutVersion = '1.3.0'
+    androidxCoreVersion = '1.17.0'
+    androidxFragmentVersion = '1.8.9'
+    
+    // ✅ Biometrics: Stable 1.2.0 is the baseline for API 36
+    androidxBiometricVersion = '1.2.0'
+    
+    // ✅ ML Kit & Camera: Essential for VinPro scanning logic
+    androidxCameraCoreVersion = '1.5.3'
+    googleMlkitBarcodeScanningVersion = '17.3.0'
+    
+    // ✅ Testing & UI
+    junitVersion = '4.13.2'
+    androidxJunitVersion = '1.3.0'       
+    androidxEspressoCoreVersion = '3.7.0' 
+    
+    // ✅ Capacitor 8 Specifics
+    coreSplashScreenVersion = '1.2.0'
+    androidxWebkitVersion = '1.15.0'
+    
+    // Support for legacy plugins
+    cordovaAndroidVersion = '14.0.1'
+}
