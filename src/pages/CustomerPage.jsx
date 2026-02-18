@@ -5,8 +5,8 @@ import CustomerForm from "../components/CustomerForm";
 import CustomerList from "../components/CustomerList";
 import CreditBand from "../components/Sales/CreditBand"; 
 import { Camera } from '@capacitor/camera';
+import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics"; // ✅ Native Haptics
 import { Phone, Mail, MessageSquare, Video, UserPlus, Zap, Car, ShieldAlert, Loader2 } from 'lucide-react';
-import { hapticSuccess, hapticImpactMedium } from "../utils/haptics";
 
 const CustomerPage = () => {
   const [customers, setCustomers] = useState([]);
@@ -18,11 +18,14 @@ const CustomerPage = () => {
   const [showForm, setShowForm] = useState(false);
   const [hasConsent, setHasConsent] = useState(false);
 
+  const triggerHaptic = async (style = ImpactStyle.Light) => {
+    try { await Haptics.impact({ style }); } catch (e) {}
+  };
+
   const loadCustomers = useCallback(async () => {
     try {
       const res = await axiosClient.get("/customers");
       setCustomers(res.data);
-      // If we have a selected customer, refresh their data from the list
       if (selected) {
         const updated = res.data.find(c => c._id === selected._id);
         if (updated) setSelected(updated);
@@ -34,18 +37,22 @@ const CustomerPage = () => {
 
   useEffect(() => { loadCustomers(); }, []);
 
-  // ⭐ Qualification Weapon: Trigger Soft Pull
+  // ✅ Reset consent when lead changes
+  useEffect(() => {
+    setHasConsent(false);
+  }, [selected?._id]);
+
   const handleRunSoftPull = async () => {
     if (!selected || !hasConsent) return;
     setIsQualifying(true);
     try {
-      // Step 2 Backend Integration: Hits the runSoftPull controller
       const res = await axiosClient.post(`/customers/${selected._id}/soft-pull`, { consent: true });
-      await hapticSuccess();
-      setSelected(res.data); // Update UI with new FICO/CreditBand
+      await Haptics.notification({ type: NotificationType.Success });
+      setSelected(res.data); 
       loadCustomers();
     } catch (err) {
       console.error("Credit Pull Failed", err);
+      await Haptics.notification({ type: NotificationType.Error });
     } finally {
       setIsQualifying(false);
     }
@@ -57,27 +64,38 @@ const CustomerPage = () => {
       const video = await Camera.pickVideos({ limit: 1 });
       if (video.videos.length > 0) {
         setIsUploading(true);
+        const videoFile = video.videos[0];
         const formData = new FormData();
-        const res = await fetch(video.videos[0].webPath);
-        formData.append("video", await res.blob(), `walkthrough_${selected._id}.mp4`);
+        
+        // Convert webPath to blob for native upload
+        const response = await fetch(videoFile.webPath);
+        const blob = await response.blob();
+        formData.append("video", blob, `walkthrough_${selected._id}.mp4`);
+
         await axiosClient.post(`/customers/${selected._id}/video`, formData, {
           onUploadProgress: (p) => setUploadProgress(Math.round((p.loaded * 100) / p.total))
         });
-        await hapticSuccess();
+        
+        await Haptics.notification({ type: NotificationType.Success });
         loadCustomers();
       }
-    } catch (err) { console.error(err); } finally { setIsUploading(false); setUploadProgress(0); }
+    } catch (err) { 
+        console.error("Video Upload Error:", err); 
+    } finally { 
+        setIsUploading(false); 
+        setUploadProgress(0); 
+    }
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 pb-24">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 pb-24 pt-safe">
       <header className="flex justify-between items-center mb-8 px-2">
         <div>
-          <h1 className="text-3xl font-black text-white tracking-tight">VinPro Pipeline</h1>
-          <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Active Deal Management</p>
+          <h1 className="text-3xl font-black text-white tracking-tighter italic uppercase">Pipeline</h1>
+          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.3em] mt-1">Active Deal Management</p>
         </div>
         <button 
-          onClick={() => { hapticImpactMedium(); setShowForm(!showForm); }} 
+          onClick={() => { triggerHaptic(ImpactStyle.Medium); setShowForm(!showForm); }} 
           className="bg-blue-600 text-white p-4 rounded-2xl shadow-xl shadow-blue-900/40 active:scale-95 transition-all"
         >
           <UserPlus size={24} />
@@ -100,18 +118,17 @@ const CustomerPage = () => {
         {/* Right Column: Deal Workspace */}
         <div className="lg:col-span-8">
           {selected ? (
-            <div className="bg-slate-900 rounded-[3rem] border border-slate-800 shadow-2xl overflow-hidden transition-all duration-500">
-              {/* Header */}
+            <div className="bg-slate-900 rounded-[3rem] border border-slate-800 shadow-2xl overflow-hidden">
               <div className="p-8 pb-0">
                 <div className="flex flex-wrap justify-between items-start gap-4 mb-6">
                   <div>
-                    <h2 className="text-4xl font-black text-white mb-2 leading-none">
+                    <h2 className="text-4xl font-black text-white mb-2 leading-none tracking-tight">
                       {selected.firstName} {selected.lastName}
                     </h2>
                     <div className="flex gap-5 text-slate-500 mt-4">
                       <a href={`tel:${selected.phone}`} className="hover:text-blue-400 transition-colors"><Phone size={22} /></a>
                       <a href={`mailto:${selected.email}`} className="hover:text-blue-400 transition-colors"><Mail size={22} /></a>
-                      <button onClick={() => hapticImpactMedium()} className="hover:text-blue-400 transition-colors"><MessageSquare size={22} /></button>
+                      <button onClick={() => triggerHaptic()} className="hover:text-blue-400 transition-colors"><MessageSquare size={22} /></button>
                     </div>
                   </div>
                   <button 
@@ -119,20 +136,19 @@ const CustomerPage = () => {
                     className="bg-white text-black px-8 py-4 rounded-[1.5rem] font-black flex items-center gap-3 hover:bg-slate-200 active:scale-95 transition-all"
                   >
                     {isUploading ? (
-                      <span className="text-sm">{uploadProgress}% Uploading...</span>
+                      <span className="text-sm font-bold uppercase">{uploadProgress}%</span>
                     ) : (
-                      <><Video size={20} /> <span className="uppercase text-xs tracking-widest">Walkthrough</span></>
+                      <><Video size={20} /> <span className="uppercase text-[10px] tracking-widest">Video walkthrough</span></>
                     )}
                   </button>
                 </div>
 
-                {/* Tabs */}
                 <div className="flex gap-10 border-b border-slate-800 mt-10">
                   {['deal', 'history', 'carfax'].map((tab) => (
                     <button
                       key={tab}
-                      onClick={() => { hapticImpactMedium(); setActiveTab(tab); }}
-                      className={`pb-5 text-[11px] font-black uppercase tracking-[0.2em] transition-all ${
+                      onClick={() => { triggerHaptic(); setActiveTab(tab); }}
+                      className={`pb-5 text-[10px] font-black uppercase tracking-[0.2em] transition-all ${
                         activeTab === tab ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-600'
                       }`}
                     >
@@ -142,12 +158,9 @@ const CustomerPage = () => {
                 </div>
               </div>
 
-              {/* Tab Content */}
               <div className="p-8">
                 {activeTab === 'deal' && (
                   <div className="space-y-10 animate-in slide-in-from-right-4 duration-500">
-                    
-                    {/* Qualification Step */}
                     <section>
                       <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
                         <Zap size={14} className="text-yellow-500" /> 01. Qualification
@@ -156,8 +169,8 @@ const CustomerPage = () => {
                       {!selected.qualification?.creditBand || selected.qualification.creditBand === 'Unknown' ? (
                         <div className="bg-slate-950/50 border border-slate-800 p-8 rounded-[2.5rem]">
                           <div className="flex items-center justify-between mb-8 gap-4">
-                            <p className="text-sm text-slate-400 font-medium leading-relaxed">
-                              Obtain digital consent to run a Soft Credit Pull. This will not affect the customer's credit score.
+                            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider leading-relaxed">
+                              Soft Pull Consent
                             </p>
                             <input 
                               type="checkbox" 
@@ -169,12 +182,12 @@ const CustomerPage = () => {
                           <button 
                             onClick={handleRunSoftPull}
                             disabled={!hasConsent || isQualifying}
-                            className={`w-full py-6 rounded-[1.5rem] font-black text-sm uppercase tracking-[0.15em] transition-all flex items-center justify-center gap-3 shadow-lg ${
-                              hasConsent ? 'bg-blue-600 text-white shadow-blue-900/20' : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                            className={`w-full py-6 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 ${
+                              hasConsent ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-600 cursor-not-allowed'
                             }`}
                           >
                             {isQualifying ? <Loader2 className="animate-spin" /> : <ShieldAlert size={20} />}
-                            {isQualifying ? 'Processing...' : 'Run Soft Qualification'}
+                            {isQualifying ? 'Syncing...' : 'Execute The Pull'}
                           </button>
                         </div>
                       ) : (
@@ -185,32 +198,23 @@ const CustomerPage = () => {
                       )}
                     </section>
 
-                    {/* Trade Step */}
                     <section>
                       <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
                         <Car size={14} className="text-blue-500" /> 02. Trade-In Appraisal
                       </h3>
-                      <button className="group w-full py-6 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] text-slate-400 hover:text-white transition-all">
+                      <button className="w-full py-6 bg-slate-900 border border-slate-800 rounded-[2rem] font-black text-[10px] uppercase tracking-[0.2em] text-slate-500 hover:text-white transition-all">
                         Launch Walkaround Checklist
                       </button>
                     </section>
                   </div>
                 )}
-
                 {activeTab === 'carfax' && <CarfaxViewer vin={selected.vin} />}
-                
-                {activeTab === 'history' && (
-                  <div className="flex flex-col items-center justify-center py-20 text-slate-700">
-                    <Zap size={48} className="mb-4 opacity-10" />
-                    <p className="text-xs font-black uppercase tracking-widest">No Recent Activity Logs</p>
-                  </div>
-                )}
               </div>
             </div>
           ) : (
-            <div className="h-[600px] flex flex-col items-center justify-center text-slate-700 border-4 border-dashed border-slate-900 rounded-[4rem]">
-              <UserPlus size={48} className="mb-4 opacity-20" />
-              <p className="font-black uppercase tracking-widest text-sm">Select a lead to desk the deal</p>
+            <div className="h-[600px] flex flex-col items-center justify-center text-slate-800 border-4 border-dashed border-slate-900 rounded-[4rem]">
+              <UserPlus size={48} className="mb-4 opacity-10" />
+              <p className="font-black uppercase tracking-widest text-xs">Select a lead to desk the deal</p>
             </div>
           )}
         </div>

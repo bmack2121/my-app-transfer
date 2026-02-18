@@ -1,7 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { useDarkMode } from '../hooks/useDarkMode'; // Fixed path
+import { useDarkMode } from '../hooks/useDarkMode';
 import { MdDashboard, MdOutlineContactPhone } from "react-icons/md";
 import { FaCarSide, FaClipboardList, FaUserTie, FaUniversity, FaFileAlt, FaUserPlus } from "react-icons/fa";
 import { RiMoneyDollarCircleFill } from "react-icons/ri";
@@ -15,17 +15,20 @@ const Navbar = () => {
   const location = useLocation();
 
   const handleLogout = () => {
+    // Clear all auth-related storage to prevent ghost sessions
     localStorage.removeItem('token');
+    localStorage.removeItem('user'); 
     setAuth({ user: null, token: null, isAuthenticated: false });
   };
 
+  // ✅ FIXED: Changed path from '/crm' to '/customers' to match App.tsx routes
   const navLinks = [
     { name: 'Dashboard', path: '/dashboard', icon: <MdDashboard /> },
     { name: 'Inventory', path: '/inventory', icon: <FaCarSide /> },
     { name: 'Deals', path: '/deals', icon: <RiMoneyDollarCircleFill /> },
     { name: 'VIN Scan', path: '/vin-scanner', icon: <AiOutlineScan /> },
-    { name: 'Leads', path: '/lead-intake', icon: <FaUserPlus /> }, // Added Lead Intake
-    { name: 'CRM', path: '/crm', icon: <MdOutlineContactPhone /> },
+    { name: 'Leads', path: '/lead-intake', icon: <FaUserPlus /> },
+    { name: 'CRM', path: '/customers', icon: <MdOutlineContactPhone /> },
   ];
 
   const adminLinks = [
@@ -51,7 +54,6 @@ const Navbar = () => {
   );
 
   return (
-    /* ✅ pt-safe ensures the navbar content sits below the Android status bar icons */
     <nav className="fixed top-0 inset-x-0 z-[100] pt-safe bg-slate-950/80 backdrop-blur-xl border-b border-white/5 px-6">
       <div className="max-w-7xl mx-auto flex items-center justify-between h-16">
 
@@ -65,7 +67,7 @@ const Navbar = () => {
           </span>
         </Link>
 
-        {/* Desktop Navigation (Visible on Large Screens) */}
+        {/* Desktop Navigation */}
         <div className="hidden xl:flex items-center gap-1">
           {navLinks.map(link => <NavItem key={link.path} link={link} />)}
           <div className="w-[1px] h-4 bg-white/10 mx-2" />
@@ -90,7 +92,7 @@ const Navbar = () => {
         </div>
       </div>
 
-      {/* Mobile Mega-Menu (Slide down) */}
+      {/* Mobile Mega-Menu */}
       {open && (
         <div className="xl:hidden fixed inset-x-0 top-[calc(4rem+var(--safe-area-top))] bg-slate-950 border-b border-white/10 p-6 shadow-2xl animate-in slide-in-from-top duration-300">
           <div className="grid grid-cols-2 gap-2">
@@ -104,7 +106,6 @@ const Navbar = () => {
               Terminate Session
             </button>
           </div>
-          {/* Padding for bottom gesture bar */}
           <div className="h-safe-bottom mt-4" />
         </div>
       )}

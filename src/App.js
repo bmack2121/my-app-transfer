@@ -2,7 +2,7 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 // Auth & Context
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider } from "./context/AuthContext"; 
 import PrivateRoute from "./routes/PrivateRoute";
 
 // Components
@@ -17,9 +17,11 @@ import Unauthorized from "./pages/Unauthorized";
 
 // Private Pages
 import Dashboard from "./pages/Dashboard";
-import AdminDashboard from "./pages/AdminDashboard"; // ✅ Added
+import AdminDashboard from "./pages/AdminDashboard";
 import CustomerPage from "./pages/CustomerPage";
+import CustomerDetailPage from "./pages/CustomerDetailPage"; // ✅ Added
 import InventoryPage from "./pages/InventoryPage";
+import VehicleDetailPage from "./pages/VehicleDetailPage"; // ✅ Added
 import DealDeskPage from "./pages/DealDeskPage";
 import TaskPage from "./pages/TaskPage";
 import UserPage from "./pages/UserPage";
@@ -31,18 +33,16 @@ import LeaseCalculator from "./pages/LeaseCalculator";
 import LeadIntakePage from './pages/LeadIntakePage';
 
 /**
- * Layout: Handles "Edge-to-Edge" UI for Jason Lucas's Vision.
+ * Layout: Handles "Edge-to-Edge" UI.
  */
 const Layout = ({ children }) => {
   const location = useLocation();
-  const authPaths = ["/login", "/register", "/forgot-password", "/reset-password"];
+  const noNavbarPaths = ["/login", "/register", "/forgot-password", "/reset-password", "/vin-scanner", "/lead-intake"];
   
-  const isFullScreen = authPaths.some((path) => location.pathname.startsWith(path)) || 
-                       location.pathname === "/vin-scanner" ||
-                       location.pathname === "/lead-intake";
+  const isFullScreen = noNavbarPaths.some((path) => location.pathname.startsWith(path));
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col overflow-x-hidden">
+    <div className="min-h-screen bg-slate-950 flex flex-col overflow-x-hidden text-slate-50">
       {!isFullScreen && <Navbar />}
       
       <main 
@@ -66,7 +66,7 @@ const App = () => {
       <Router>
         <Layout>
           <Routes>
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
             {/* Public Routes */}
             <Route path="/login" element={<LoginPage />} />
@@ -75,18 +75,23 @@ const App = () => {
             <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
             <Route path="/unauthorized" element={<Unauthorized />} />
 
-            {/* Protected Routes */}
+            {/* Protected Routes Block */}
             <Route element={<PrivateRoute />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/admin-control" element={<AdminDashboard />} />
               <Route path="/lease-calculator" element={<LeaseCalculator />} />
+              
+              {/* Inventory Management */}
               <Route path="/inventory" element={<InventoryPage />} />
+              <Route path="/inventory/:id" element={<VehicleDetailPage />} /> {/* ✅ FIXED REDIRECT */}
+              
+              {/* CRM / Customer Management */}
               <Route path="/customers" element={<CustomerPage />} />
+              <Route path="/customers/:id" element={<CustomerDetailPage />} /> {/* ✅ ADDED */}
+              
               <Route path="/deals" element={<DealDeskPage />} />
               <Route path="/tasks" element={<TaskPage />} />
               <Route path="/team" element={<UserPage />} />
-              
-              {/* ✅ FIXED: Ensuring this path matches your Sidebar/Navbar exactly */}
               <Route path="/financing-banks" element={<FinancingBanksPage />} />
               
               {/* Sales Tools */}
@@ -96,7 +101,8 @@ const App = () => {
               <Route path="/carfax" element={<CarfaxPage />} />
             </Route>
 
-            <Route path="*" element={<Navigate to="/login" replace />} />
+            {/* Catch-all Redirect */}
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </Layout>
       </Router>

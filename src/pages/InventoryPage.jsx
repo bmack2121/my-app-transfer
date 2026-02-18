@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; // ✅ Added for navigation
+import { useNavigate } from "react-router-dom";
 import axiosClient from "../api/axiosClient";
 import { useDarkMode } from "../hooks/useDarkMode";
 import { 
@@ -8,11 +8,10 @@ import {
   RectangleStackIcon, 
   WrenchScrewdriverIcon, 
   ArrowsRightLeftIcon,
-  DocumentMagnifyingGlassIcon, // For Carfax
+  DocumentMagnifyingGlassIcon,
   FunnelIcon
 } from "@heroicons/react/24/outline";
 
-// ✅ FIXED: Direct Capacitor Haptics
 import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
 
 const InventoryPage = () => {
@@ -26,9 +25,7 @@ const InventoryPage = () => {
     const fetchInventory = async () => {
       try {
         setLoading(true);
-        // Fetches the updated schema data including Engine/DriveType
         const { data } = await axiosClient.get("/inventory");
-        // Handle potential data wrapping (e.g. { units: [...] }) or raw array
         const units = Array.isArray(data) ? data : (data.units || []);
         setInventory(units);
       } catch (err) {
@@ -52,10 +49,10 @@ const InventoryPage = () => {
 
   const handleAddUnit = () => {
     triggerHaptic(ImpactStyle.Medium);
-    navigate("/vin-scanner"); // Workflow: Scan VIN to add unit
+    navigate("/vin-scanner");
   };
 
-  // ✅ FIX: Match the actual schema keys (stockNumber instead of stock)
+  // ✅ FIXED: Added null-checks (|| "") for all fields to prevent filtering crashes
   const filteredInventory = inventory.filter(unit => 
     (unit.model || "").toLowerCase().includes(search.toLowerCase()) ||
     (unit.make || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -67,12 +64,9 @@ const InventoryPage = () => {
     <div className={`min-h-screen p-6 pt-safe pb-32 transition-colors duration-300 ${isDark ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-900"}`}>
       <div className="max-w-7xl mx-auto">
         
-        {/* Header Section */}
+        {/* Header Section - Branding Removed */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
           <div>
-            <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.4em] mb-1">
-              Jason Lucas Vision
-            </p>
             <h1 className="text-3xl font-black uppercase italic tracking-tighter">
               Unit <span className="text-blue-600">Inventory</span>
             </h1>
@@ -135,7 +129,6 @@ const InventoryPage = () => {
 };
 
 const InventoryCard = ({ unit, isDark, navigate, triggerHaptic }) => {
-  // Support both lowercase (schema) and Capitalized (frontend) statuses
   const statusColors = {
     available: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20",
     Available: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20",
@@ -147,14 +140,13 @@ const InventoryCard = ({ unit, isDark, navigate, triggerHaptic }) => {
 
   const handleCardClick = () => {
     triggerHaptic();
-    // Navigate to Detail Page
+    // ✅ Navigation matches path="/inventory/:id" in App.js
     navigate(`/inventory/${unit._id || unit.vin}`, { state: { unit } });
   };
 
   const handleCarfaxClick = (e) => {
-    e.stopPropagation(); // Don't trigger card click
+    e.stopPropagation();
     triggerHaptic();
-    // Navigate to Carfax Page with VIN
     navigate("/carfax", { state: { vin: unit.vin } });
   };
 
@@ -165,7 +157,6 @@ const InventoryCard = ({ unit, isDark, navigate, triggerHaptic }) => {
         isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
       }`}
     >
-      {/* Media Preview Area */}
       <div className={`relative h-48 overflow-hidden ${isDark ? "bg-slate-800" : "bg-slate-100"}`}>
         {unit.photo ? (
             <img src={unit.photo} alt={unit.model} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -175,12 +166,10 @@ const InventoryCard = ({ unit, isDark, navigate, triggerHaptic }) => {
             </div>
         )}
         
-        {/* Status Badge */}
         <div className={`absolute top-4 right-4 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border backdrop-blur-md ${statusColors[unit.status] || "text-slate-400 bg-slate-900/50 border-slate-700"}`}>
           {unit.status}
         </div>
 
-        {/* Specs Overlays */}
         <div className="absolute bottom-3 left-3 flex gap-2">
            {(unit.engine && unit.engine !== "N/A") && (
              <div className="flex items-center gap-1 bg-black/60 backdrop-blur-md px-2 py-1 rounded-lg border border-white/10 text-[8px] font-bold text-white uppercase">
@@ -217,7 +206,6 @@ const InventoryCard = ({ unit, isDark, navigate, triggerHaptic }) => {
             {unit.price > 0 ? `$${unit.price.toLocaleString()}` : "CALL"}
           </span>
           
-          {/* ✅ Carfax Quick Link */}
           <button 
             onClick={handleCarfaxClick}
             className={`flex items-center gap-1 text-[9px] font-black uppercase px-3 py-1.5 rounded-lg border transition-colors ${

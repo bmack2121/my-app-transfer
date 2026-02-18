@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { Phone, Globe, Landmark, ExternalLink, Search, X, Filter } from "lucide-react";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
-// ✅ IMPORT THE BROWSER PLUGIN
+// ✅ Capacitor Browser for reliable external navigation
 import { Browser } from "@capacitor/browser";
 import bankData from "../data/banks.json";
 
@@ -23,39 +23,35 @@ const FinancingBanksPage = () => {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [searchQuery, activeTab]);
 
-  // ✅ FIXED: Using Capacitor Browser for reliable external navigation
   const handlePortalNavigation = async (url) => {
     if (!url || url === "#" || url === "") return;
     
     try {
-      // Provide physical feedback
+      // Physical feedback for mobile users
       await Haptics.impact({ style: ImpactStyle.Medium });
       
-      // Open in the system's default browser
+      // Open in the system's default browser (best for Capacitor apps)
       await Browser.open({ url: url });
     } catch (err) {
       console.error("Browser error:", err);
-      // Fallback for web testing
+      // Fallback for web/local testing
       window.open(url, '_blank');
     }
   };
 
   return (
     <div className="p-6 bg-slate-950 min-h-screen text-slate-100 pb-32">
-      {/* 👑 Branding Header */}
+      {/* 🏦 Branding Header - Cleaned up */}
       <header className="mb-8 pt-safe">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.4em] mb-1">
-              Jason Lucas Vision
-            </p>
             <h1 className="text-3xl font-black uppercase italic tracking-tighter flex items-center gap-3">
               <Landmark className="text-blue-500" size={32} />
               Lender Portal
             </h1>
           </div>
           <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-2xl hidden md:block">
-             <span className="text-[10px] font-black text-slate-500 uppercase">Live Dealer Sync</span>
+             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Live Dealer Sync</span>
           </div>
         </div>
       </header>
