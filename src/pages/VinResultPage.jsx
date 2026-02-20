@@ -6,7 +6,6 @@ import {
   DocumentMagnifyingGlassIcon, 
   PlusCircleIcon, 
   ArrowLeftIcon,
-  ChartBarIcon,
   CurrencyDollarIcon,
   TruckIcon
 } from "@heroicons/react/24/outline";
@@ -36,13 +35,17 @@ const VinResultPage = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        // 1. Decode VIN via internal Engine (NHTSA)
+        // 1. Decode VIN via internal Engine (NHTSA API proxy)
         const decodeRes = await axiosClient.get(`/inventory/decode/${vin}`);
         setVehicleInfo(decodeRes.data || {});
 
         // 2. Fetch Market Intelligence via MarketCheck Bridge
-        const marketRes = await axiosClient.get(`/marketcheck/v2/predict/${vin}`).catch(() => null);
-        if (marketRes) setMarketData(marketRes.data);
+        try {
+          const marketRes = await axiosClient.get(`/marketcheck/v2/predict/${vin}`);
+          if (marketRes?.data) setMarketData(marketRes.data);
+        } catch (marketErr) {
+          console.warn("MarketCheck API unavailable or returned no data.");
+        }
         
       } catch (err) {
         console.error("Data retrieval failed", err);
@@ -71,7 +74,6 @@ const VinResultPage = () => {
         fuelType: vehicleInfo.fuelType ?? "Gasoline",
         exteriorColor: selectedColor,
         status: "available", 
-        // 💵 Populating MSRP or Market average as starting price
         price: marketData?.mean_price || 0, 
         stockNumber: `VP-${Date.now().toString().slice(-6)}`
       };
@@ -80,7 +82,10 @@ const VinResultPage = () => {
       
       if (res.status === 201 || res.status === 200) {
         try { await Haptics.notification({ type: NotificationType.Success }); } catch (e) {}
-        navigate("/inventory");
+        
+        // ✅ FIX: Navigate directly to the new vehicle's detail page 
+        // so the user can immediately use the VehicleMediaUploader.
+        navigate(`/inventory/${res.data._id || res.data.vin}`);
       }
     } catch (err) {
       const msg = err.response?.data?.message || "Cloud Sync Failed";
@@ -101,10 +106,11 @@ const VinResultPage = () => {
 
   return (
     <div className="p-6 bg-slate-950 min-h-screen text-white pb-32 overflow-y-auto pt-safe">
+      
       {/* 🧭 Top Navigation */}
       <div className="flex items-center justify-between mb-8">
-        <button onClick={() => navigate("/vin-scanner")} className="p-3 bg-slate-900 rounded-2xl border border-white/5 active:scale-90 transition-all">
-          <ArrowLeftIcon className="w-5 h-5" />
+        <button onClick={() => navigate("/vin-scanner")} className="p-3 bg-slate-900 rounded-2xl border border-white/5 active:scale-90 transition-all shadow-lg">
+          <ArrowLeftIcon className="w-5 h-5 stroke-[2px]" />
         </button>
         <div className="text-right">
           <h1 className="text-[9px] font-black text-blue-500 uppercase tracking-widest leading-none">Scanning Engine</h1>
@@ -114,7 +120,7 @@ const VinResultPage = () => {
 
       {/* 🚗 Vehicle Hero Card */}
       <div className="mb-6 p-8 bg-slate-900 border border-slate-800 rounded-[2.5rem] relative overflow-hidden shadow-2xl">
-        <div className="absolute -top-10 -right-10 opacity-5 rotate-12">
+        <div className="absolute -top-10 -right-10 opacity-5 rotate-12 pointer-events-none">
            <TruckIcon className="w-48 h-48" />
         </div>
         
@@ -124,22 +130,23 @@ const VinResultPage = () => {
         <h3 className="text-3xl font-black uppercase italic text-blue-500 leading-none mb-2">
           {vehicleInfo?.make ?? "Unknown"}
         </h3>
-        <p className="text-xl font-bold text-slate-400 uppercase tracking-tight">
+        <p className="text-xl font-bold text-slate-400 uppercase tracking-tight relative z-10">
           {vehicleInfo?.model ?? "Unit Found"} {vehicleInfo?.trim ?? ""}
         </p>
       </div>
 
       {/* 📊 Market Intelligence (MarketCheck Integration) */}
       {marketData && (
-        <div className="mb-8 p-6 bg-blue-600/10 border border-blue-500/20 rounded-[2.5rem] flex items-center justify-between shadow-glow">
+        <div className="mb-8 p-6 bg-blue-600/10 border border-blue-500/20 rounded-[2.5rem] flex items-center justify-between shadow-[0_0_15px_rgba(37,99,235,0.15)]">
           <div className="flex items-center gap-4">
             <div className="p-4 bg-blue-600 rounded-2xl shadow-lg shadow-blue-600/30">
-              <CurrencyDollarIcon className="w-6 h-6 text-white" />
+              <CurrencyDollarIcon className="w-6 h-6 text-white stroke-[2px]" />
             </div>
             <div>
               <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest mb-1">Predictive Valuation</p>
               <p className="text-2xl font-black italic tracking-tighter">
-                ${Math.round(marketData.mean_price)?.toLocaleString()}
+                {/* ✅ FIX: Safety check to prevent NaN if MarketCheck returns 0 or null */}
+                {marketData.mean_price ? `$${Math.round(marketData.mean_price).toLocaleString()}` : "N/A"}
               </p>
             </div>
           </div>
@@ -168,15 +175,15 @@ const VinResultPage = () => {
       {/* 🎨 Color Configuration */}
       <div className="mb-10">
         <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] mb-4 ml-2">Verified Color</p>
-        <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 px-1">
+        <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 px-1 snap-x snap-mandatory">
           {['White', 'Black', 'Silver', 'Blue', 'Red', 'Gray', 'Other'].map((color) => (
             <button
               key={color}
               onClick={() => { triggerHaptic(); setSelectedColor(color); }}
-              className={`flex-shrink-0 px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+              className={`snap-center flex-shrink-0 px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${
                 selectedColor === color 
                 ? 'bg-blue-600 border-blue-600 text-white shadow-xl shadow-blue-600/20' 
-                : 'bg-slate-900 border-slate-800 text-slate-500'
+                : 'bg-slate-900 border-slate-800 text-slate-500 hover:bg-slate-800'
               }`}
             >
               {color}
@@ -193,14 +200,14 @@ const VinResultPage = () => {
         >
           <div className="flex items-center gap-4">
             <div className="p-4 bg-slate-950 rounded-2xl border border-white/5 group-hover:border-blue-500/20 transition-colors">
-              <DocumentMagnifyingGlassIcon className="w-8 h-8 text-blue-500" />
+              <DocumentMagnifyingGlassIcon className="w-8 h-8 text-blue-500 stroke-[1.5px]" />
             </div>
             <div className="text-left">
               <p className="font-black uppercase text-sm tracking-tight italic">Run History Bridge</p>
               <p className="text-[9px] text-slate-500 uppercase tracking-widest">VIN Safety & Title Scan</p>
             </div>
           </div>
-          <ArrowLeftIcon className="w-5 h-5 text-slate-800 rotate-180" />
+          <ArrowLeftIcon className="w-5 h-5 text-slate-600 rotate-180 stroke-[2px] group-hover:text-blue-500 transition-colors" />
         </button>
 
         <button
@@ -210,7 +217,7 @@ const VinResultPage = () => {
         >
           <div className="flex items-center gap-4 text-white">
             <div className="p-4 bg-white/10 rounded-2xl border border-white/20">
-              <PlusCircleIcon className="w-8 h-8" />
+              <PlusCircleIcon className="w-8 h-8 stroke-[1.5px]" />
             </div>
             <div className="text-left">
               <p className="font-black uppercase text-sm tracking-tight italic">{adding ? "SYNCING..." : "COMMIT TO LOT"}</p>

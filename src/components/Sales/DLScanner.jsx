@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-// ✅ Migrated to ML Kit
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { parseDLData } from '../../utils/dlParser';
@@ -8,7 +7,6 @@ import { UserPlus, X } from 'lucide-react';
 const DLScanner = ({ onLeadCaptured }) => {
   const [isScanning, setIsScanning] = useState(false);
 
-  // Clean up scanner when component unmounts
   useEffect(() => {
     return () => {
       stopScan();
@@ -17,46 +15,69 @@ const DLScanner = ({ onLeadCaptured }) => {
 
   const startScan = async () => {
     try {
-      // 1. Check/Request Permissions
-      const { camera } = await BarcodeScanner.requestPermissions();
-      if (camera !== 'granted') {
-        alert("Camera permission is required to scan licenses.");
-        return;
+      // 1. Check & Request Permissions
+      const status = await BarcodeScanner.checkPermissions();
+      if (status.camera !== 'granted') {
+        const request = await BarcodeScanner.requestPermissions();
+        if (request.camera !== 'granted') {
+          alert("Camera access is required to scan IDs.");
+          return;
+        }
       }
 
-      // 2. Prepare the UI
-      // ML Kit requires us to hide the body background to see the camera behind the webview
-      document.querySelector('body').classList.add('scanner-active');
-      setIsScanning(true);
+      // 2. Verify Google Play Services Barcode Module
+      const isModuleAvailable = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
+      if (!isModuleAvailable.available) {
+        await BarcodeScanner.installGoogleBarcodeScannerModule();
+        alert("Initializing scanner modules... Please try again in a few seconds.");
+        return; 
+      }
 
-      // 3. Start Scanning (Targeting PDF417 specifically for IDs)
-      const { barcodes } = await BarcodeScanner.startScan({
+      // 3. Prepare the UI & Native Webview
+      document.body.classList.add('scanner-active');
+      setIsScanning(true);
+      
+      // ✅ FIX: Crucial for native camera visibility
+      await BarcodeScanner.hideBackground();
+
+      // 4. Set up the Listener
+      await BarcodeScanner.addListener('barcodesScanned', async (event) => {
+        if (event.barcodes && event.barcodes.length > 0) {
+          const rawData = event.barcodes[0].rawValue;
+          const parsedData = parseDLData(rawData);
+          
+          await Haptics.impact({ style: ImpactStyle.Medium });
+          
+          // ✅ FIX: Safely tear down everything at once
+          await stopScan();
+          
+          if (onLeadCaptured) onLeadCaptured(parsedData);
+        }
+      });
+
+      // 5. Start the Native Camera View
+      await BarcodeScanner.startScan({
         formats: [BarcodeFormat.Pdf417],
       });
 
-      if (barcodes.length > 0) {
-        const rawData = barcodes[0].rawValue;
-        
-        // Use your existing parser utility
-        const parsedData = parseDLData(rawData);
-        
-        await Haptics.impact({ style: ImpactStyle.Medium });
-        await stopScan();
-        onLeadCaptured(parsedData); // Auto-populates the Lead Intake form
-      }
     } catch (error) {
       console.error("DL Scan Error:", error);
-      stopScan();
+      await stopScan();
     }
   };
 
   const stopScan = async () => {
     try {
+      // Clean up all listeners and UI layers
+      await BarcodeScanner.removeAllListeners();
       await BarcodeScanner.stopScan();
+      
+      // ✅ FIX: Restore the native webview background
+      await BarcodeScanner.showBackground();
     } catch (e) {
-      // Ignore errors if scanner wasn't running
+      // Silent catch if already stopped
     }
-    document.querySelector('body').classList.remove('scanner-active');
+    document.body.classList.remove('scanner-active');
     setIsScanning(false);
   };
 
@@ -71,20 +92,22 @@ const DLScanner = ({ onLeadCaptured }) => {
           Scan License to Start Lead
         </button>
       ) : (
-        /* The scanner UI overlay */
-        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-between p-10 bg-transparent">
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-between p-10 bg-transparent pointer-events-none">
           <div className="w-full flex justify-end">
             <button 
               onClick={stopScan} 
-              className="p-4 bg-red-600 rounded-full text-white shadow-xl active:scale-90"
+              className="p-4 bg-red-600 rounded-full text-white shadow-xl active:scale-90 pointer-events-auto"
             >
               <X size={28} />
             </button>
           </div>
           
-          {/* Overlay Guide: Helps the Salesman align the PDF417 barcode */}
-          <div className="w-full h-48 border-4 border-blue-400 border-dashed rounded-3xl flex flex-col items-center justify-center bg-blue-400/10 backdrop-blur-[2px]">
-            <p className="text-white font-black bg-blue-600 px-6 py-2 rounded-full shadow-lg text-sm uppercase tracking-widest">
+          {/* Enhanced Target Guide for Driver's Licenses */}
+          <div className="relative w-full h-48 border-4 border-blue-400 border-dashed rounded-3xl flex flex-col items-center justify-center bg-blue-400/10 backdrop-blur-[2px] overflow-hidden">
+            {/* Reusing the laser animation from your global.css */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-blue-400 shadow-[0_0_15px_rgba(59,130,246,1)] animate-[scan-move_2s_infinite]"></div>
+            
+            <p className="text-white font-black bg-blue-600 px-6 py-2 rounded-full shadow-lg text-sm uppercase tracking-widest mt-auto mb-4">
               Scan Back of ID
             </p>
           </div>

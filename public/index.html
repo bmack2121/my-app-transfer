@@ -5,7 +5,7 @@
     
     <meta 
       name="viewport" 
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no, shrink-to-fit=no" 
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, user-scalable=no, shrink-to-fit=no" 
     />
 
     <meta name="theme-color" content="#020617" />
@@ -20,20 +20,38 @@
     <title>VinPro</title>
 
     <style>
-      /* ✅ Prevents white flash on load and handles the base background for Edge-to-Edge */
-      html, body {
+      /* * 📸 CAPACITOR CAMERA FIX
+       * The 'html' tag MUST be transparent for the native camera layer to show through.
+       */
+      html {
+        background: transparent !important;
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        overflow: hidden; 
+      }
+
+      /* * The body holds the base background color to prevent a white flash 
+       * before the React CSS bundle loads.
+       */
+      body {
         background-color: #020617;
         margin: 0;
         padding: 0;
         height: 100%;
         width: 100%;
-        overflow: hidden; /* Recommended for Capacitor to prevent "rubber-banding" */
+        overflow: hidden; 
+        
+        /* Prevents the default iOS/Android long-press copy/paste menus */
+        -webkit-touch-callout: none; 
       }
 
+      /* The React app container handles the actual scrollable content */
       #root {
         height: 100%;
         width: 100%;
-        overflow-y: auto; /* Allows scrolling inside the React app container */
+        overflow-y: auto; 
         -webkit-overflow-scrolling: touch;
       }
     </style>

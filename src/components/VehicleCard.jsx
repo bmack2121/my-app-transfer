@@ -6,7 +6,7 @@ import axiosClient from '../api/axiosClient';
 
 const VehicleCard = ({ vehicle, isBulkMode, isSelected, onToggleSelect, isDark = true }) => {
   const [uploading, setUploading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState(vehicle.imageUrl || vehicle.photo || null);
+  const [previewUrl, setPreviewUrl] = useState(vehicle.photos?.[0] || vehicle.imageUrl || vehicle.photo || null);
   const navigate = useNavigate();
 
   // 🛠️ Navigation Helper
@@ -15,33 +15,50 @@ const VehicleCard = ({ vehicle, isBulkMode, isSelected, onToggleSelect, isDark =
     if (isBulkMode) return;
     
     try { await Haptics.impact({ style: ImpactStyle.Light }); } catch (err) {}
-    navigate(`/inventory/${vehicle._id}`);
+    navigate(`/inventory/${vehicle._id || vehicle.vin}`);
   };
 
-  // 📸 Media Capture
+  // 📸 Media Capture (Updated for Multer Form-Data)
   const handleCaptureImage = async (e) => {
     e.stopPropagation();
     try {
+      // 1. Get URI instead of Base64 to save memory
       const image = await Camera.getPhoto({
-        quality: 90,
+        quality: 80,
         allowEditing: false,
         source: CameraSource.Camera,
-        resultType: CameraResultType.Base64
+        resultType: CameraResultType.Uri 
       });
 
       setUploading(true);
 
-      const formattedBase64 = `data:image/jpeg;base64,${image.base64String}`;
-
-      const res = await axiosClient.post(`/inventory/${vehicle._id}/image`, {
-        image: formattedBase64
+      // 2. Convert URI to Blob for Multer
+      const response = await fetch(image.webPath);
+      const blob = await response.blob();
+      const file = new File([blob], `photo-${Date.now()}.${image.format}`, { 
+        type: `image/${image.format}` 
       });
+
+      // 3. Package into FormData
+      const formData = new FormData();
+      formData.append("photos", file);
+      // Fallback stock number if the backend needs it for the filename
+      formData.append("stockNumber", vehicle.stockNumber || "VINPRO"); 
+
+      // 4. Send to the updated Express endpoint
+      const res = await axiosClient.put(`/inventory/${vehicle._id}`, formData);
       
-      setPreviewUrl(res.data.photo);
+      // Update local preview immediately
+      if (res.data.photos && res.data.photos.length > 0) {
+        // Grab the most recently added photo
+        setPreviewUrl(res.data.photos[res.data.photos.length - 1]);
+      }
+      
       try { await Haptics.notification({ type: NotificationType.Success }); } catch (err) {}
     } catch (err) {
       if (err.message !== "User cancelled photos app") {
         console.error("Camera error:", err);
+        try { await Haptics.notification({ type: NotificationType.Error }); } catch (e) {}
       }
     } finally {
       setUploading(false);
@@ -52,14 +69,16 @@ const VehicleCard = ({ vehicle, isBulkMode, isSelected, onToggleSelect, isDark =
   const daysOnLot = vehicle.daysOnLot || 0;
   const agingColor = daysOnLot > 60 ? 'text-rose-500' : daysOnLot > 30 ? 'text-orange-500' : 'text-emerald-500';
   
-  // Market Check Logic (If integrated in backend)
-  const isAggressive = vehicle.marketRank === 'Great Deal' || vehicle.price < (vehicle.marketAverage * 0.95);
+  // ✅ FIX: Use the new nested marketData structure from the Node.js backend
+  const marketPrice = vehicle.marketData?.mean_price || vehicle.marketAverage || 0;
+  const isAggressive = (vehicle.marketData?.price_rank === 'Great Deal') || (marketPrice > 0 && vehicle.price < (marketPrice * 0.95));
 
+  // ✅ Helper to format relative database paths into absolute server URLs
   const getFullImageUrl = (path) => {
     if (!path) return null;
-    if (path.startsWith('http') || path.startsWith('data:')) return path;
-    const baseUrl = axiosClient.defaults.baseURL?.split('/api')[0] || 'http://192.168.0.73:5000';
-    return `${baseUrl}${path}`;
+    if (path.startsWith('http') || path.startsWith('data:')) return path; 
+    const baseUrl = (process.env.REACT_APP_API_BASE_URL || "http://192.168.0.73:5000/api").replace('/api', '');
+    return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
   };
 
   return (
@@ -143,10 +162,10 @@ const VehicleCard = ({ vehicle, isBulkMode, isSelected, onToggleSelect, isDark =
         <div className="mt-5 flex items-center justify-between">
           <div className="flex flex-col">
             <span className={`text-2xl font-black italic tracking-tighter leading-none ${isDark ? 'text-white' : 'text-slate-950'}`}>
-                ${Number(vehicle.price || 0).toLocaleString()}
+                {vehicle.price > 0 ? `$${Number(vehicle.price).toLocaleString()}` : "DEALER PRICE"}
             </span>
-            {vehicle.marketAverage && (
-                <span className="text-[8px] font-bold text-slate-500 uppercase mt-1">Market: ${vehicle.marketAverage.toLocaleString()}</span>
+            {marketPrice > 0 && (
+                <span className="text-[8px] font-bold text-slate-500 uppercase mt-1">Market: ${Math.round(marketPrice).toLocaleString()}</span>
             )}
           </div>
           

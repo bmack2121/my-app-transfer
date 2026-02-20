@@ -14,6 +14,16 @@ import {
 
 import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
 
+// ✅ Helper to format relative database paths into absolute server URLs
+const getMediaUrl = (path) => {
+  if (!path) return '';
+  if (path.startsWith('http')) return path; // Already an absolute URL
+  
+  // Strip '/api' from the end of the Axios base URL to point to the server root
+  const baseUrl = (process.env.REACT_APP_API_BASE_URL || "http://192.168.0.73:5000/api").replace('/api', '');
+  return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+};
+
 const InventoryPage = () => {
   const { isDark } = useDarkMode();
   const navigate = useNavigate();
@@ -26,7 +36,6 @@ const InventoryPage = () => {
       try {
         setLoading(true);
         const { data } = await axiosClient.get("/inventory");
-        // Ensure data is an array regardless of API response structure
         const units = Array.isArray(data) ? data : (data.units || []);
         setInventory(units);
       } catch (err) {
@@ -125,19 +134,6 @@ const InventoryPage = () => {
 };
 
 const InventoryCard = ({ unit, isDark, navigate, triggerHaptic }) => {
-  const [marketData, setMarketData] = useState(null);
-
-  useEffect(() => {
-    const fetchValue = async () => {
-      try {
-        // Fetch predicted price/averages from your new MarketCheck route
-        const { data } = await axiosClient.get(`/marketcheck/v2/predict/${unit.vin}`);
-        setMarketData(data);
-      } catch (err) { /* Silent fail */ }
-    };
-    if (unit.vin) fetchValue();
-  }, [unit.vin]);
-
   const handleCardClick = () => {
     triggerHaptic();
     navigate(`/inventory/${unit._id || unit.vin}`);
@@ -155,8 +151,7 @@ const InventoryCard = ({ unit, isDark, navigate, triggerHaptic }) => {
     hold: "text-amber-400 bg-amber-500/10 border-amber-500/20",
   };
 
-  // Logic for Market Badge
-  const isBelowMarket = marketData && unit.price < marketData.mean_price;
+  const isBelowMarket = unit.marketData && unit.price < unit.marketData.mean_price;
 
   return (
     <div 
@@ -168,7 +163,8 @@ const InventoryCard = ({ unit, isDark, navigate, triggerHaptic }) => {
       {/* 📸 Media Hero */}
       <div className={`relative h-52 overflow-hidden ${isDark ? "bg-slate-950" : "bg-slate-100"}`}>
         {unit.photos?.[0] ? (
-            <img src={unit.photos[0]} alt={unit.model} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+            // ✅ FIX: Wrapped the image source in the formatting helper
+            <img src={getMediaUrl(unit.photos[0])} alt={unit.model} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
         ) : (
             <div className="absolute inset-0 flex items-center justify-center opacity-10">
               <RectangleStackIcon className="w-24 h-24 text-slate-500" />
@@ -177,11 +173,11 @@ const InventoryCard = ({ unit, isDark, navigate, triggerHaptic }) => {
         
         {/* Status Badge */}
         <div className={`absolute top-5 right-5 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border backdrop-blur-xl ${statusColors[unit.status?.toLowerCase()] || "text-slate-400 bg-slate-900/80 border-slate-700"}`}>
-          {unit.status}
+          {unit.status || 'UNKNOWN'}
         </div>
 
         {/* Market Analysis Badge */}
-        {marketData && (
+        {unit.marketData && (
           <div className={`absolute top-5 left-5 flex items-center gap-2 px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest backdrop-blur-xl border ${isBelowMarket ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-blue-600/20 text-blue-400 border-blue-500/30'}`}>
             <ChartBarIcon className="w-3.5 h-3.5" />
             {isBelowMarket ? 'Aggressive Pricing' : 'Market Fair'}
@@ -215,9 +211,10 @@ const InventoryCard = ({ unit, isDark, navigate, triggerHaptic }) => {
             <span className="text-2xl font-black italic tracking-tighter text-white">
               {unit.price > 0 ? `$${unit.price.toLocaleString()}` : "DEALER PRICE"}
             </span>
-            {marketData && (
+            {unit.marketData && (
               <span className="text-[8px] font-black text-slate-600 uppercase mt-1">
-                Market Avg: ${Math.round(marketData.mean_price)?.toLocaleString()}
+                {/* ✅ FIX: Safety check for missing mean_price to prevent NaN formatting errors */}
+                Market Avg: {unit.marketData.mean_price ? `$${Math.round(unit.marketData.mean_price).toLocaleString()}` : 'N/A'}
               </span>
             )}
           </div>

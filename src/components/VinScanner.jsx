@@ -1,14 +1,15 @@
 import React, { useState } from "react";
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
-import { TextRecognition } from '@pantrist/capacitor-plugin-ml-kit-text-recognition';
+// ✅ Wildcard import bypasses Webpack's strict named-export errors
+import * as OCRPlugin from '@pantrist/capacitor-plugin-ml-kit-text-recognition';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 
 const VinScanner = ({ onDetected }) => {
   const [status, setStatus] = useState("Ready to scan");
   const [loading, setLoading] = useState(false);
 
-  // ✅ VINs never contain I, O, or Q to avoid confusion with numbers
+  // VINs never contain I, O, or Q to avoid confusion with numbers
   const validateVIN = (vin) => {
     if (!vin) return false;
     const cleanVin = vin.trim().toUpperCase();
@@ -22,9 +23,10 @@ const VinScanner = ({ onDetected }) => {
         `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${vin}?format=json`
       );
       const json = await response.json();
-      const data = json.Results[0];
+      const data = json?.Results?.[0];
 
-      // Optimized mapping for 2026 vehicle types (including EVs)
+      if (!data) return { vin };
+
       return {
         vin: vin,
         year: data.ModelYear,
@@ -34,7 +36,6 @@ const VinScanner = ({ onDetected }) => {
         driveTrain: data.DriveType,
         fuelType: data.FuelPrimary,
         bodyClass: data.BodyClass,
-        // Cleaner engine string handling for diverse powertrains
         engine: data.DisplacementL 
           ? `${data.DisplacementL}L ${data.EngineConfiguration || ''}${data.EngineCylinders || ''}`.trim()
           : data.MotorKW ? `${data.MotorKW}kW Electric` : "Standard Powertrain"
@@ -48,46 +49,75 @@ const VinScanner = ({ onDetected }) => {
   const handleScan = async () => {
     try {
       setLoading(true);
-      setStatus("Waking Camera...");
+      setStatus("Checking Permissions...");
 
-      // Capture photo (Base64 is required for ML Kit process)
+      // 1. Ensure Camera Permissions are actually granted
+      const perm = await Camera.checkPermissions();
+      if (perm.camera !== 'granted') {
+        const req = await Camera.requestPermissions();
+        if (req.camera !== 'granted') {
+          setStatus("Camera permission denied");
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 2. Ensure Google ML Kit modules are ready (Android requirement)
+      const isModuleAvailable = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
+      if (!isModuleAvailable.available) {
+        setStatus("Installing Scanner Modules...");
+        await BarcodeScanner.installGoogleBarcodeScannerModule();
+      }
+
+      setStatus("Waking Camera...");
       const image = await Camera.getPhoto({
-        quality: 100, // Highest quality for better OCR accuracy
+        quality: 90, // Slightly reduced for faster OCR processing
         source: CameraSource.Camera,
         resultType: CameraResultType.Base64,
       });
 
-      // ✅ FIX: ML Kit usually expects the string WITHOUT the 'data:image/jpeg;base64,' prefix
+      if (!image || !image.base64String) {
+        setStatus("Scan cancelled");
+        return;
+      }
+
       const base64Data = image.base64String;
 
       // STEP 1: Barcode Scan (Fastest)
       setStatus("Searching for Barcode...");
-      const { barcodes } = await BarcodeScanner.readBarcodesFromImage({
+      const barcodeResult = await BarcodeScanner.readBarcodesFromImage({
         base64Image: base64Data,
         formats: [BarcodeFormat.Code128, BarcodeFormat.Code39],
-      });
+      }).catch(() => null);
 
-      const barcodeVin = barcodes.find((b) => validateVIN(b.rawValue));
-      if (barcodeVin) {
-        return finalizeScan(barcodeVin.rawValue.toUpperCase());
+      if (barcodeResult?.barcodes?.length > 0) {
+        const barcodeVin = barcodeResult.barcodes.find((b) => validateVIN(b.rawValue));
+        if (barcodeVin) {
+          return await finalizeScan(barcodeVin.rawValue.toUpperCase());
+        }
       }
 
-      // STEP 2: OCR Fallback (For VINs on dashboards or titles)
+      // STEP 2: OCR Fallback
       setStatus("Analyzing Text (OCR)...");
-      const { text } = await TextRecognition.detectText({
+      
+      // ✅ Safely extract the actual plugin instance from the wildcard import
+      const OCR = Object.values(OCRPlugin).find(v => typeof v === 'object' && v.detectText) || Object.values(OCRPlugin)[0]; 
+
+      const ocrResult = await OCR.detectText({
         base64Image: base64Data,
-      });
+      }).catch(() => null);
 
-      // Join multi-line text and strip spaces
-      const cleanedText = text.replace(/[\s\n\t]/g, '');
-      const potentialVins = cleanedText.match(/[A-HJ-NPR-Z0-9]{17}/gi) || [];
-      const validOcrVin = potentialVins.find((v) => validateVIN(v));
+      if (ocrResult?.text) {
+        const cleanedText = ocrResult.text.replace(/[\s\n\t]/g, '');
+        const potentialVins = cleanedText.match(/[A-HJ-NPR-Z0-9]{17}/gi) || [];
+        const validOcrVin = potentialVins.find((v) => validateVIN(v));
 
-      if (validOcrVin) {
-        return finalizeScan(validOcrVin.toUpperCase());
+        if (validOcrVin) {
+          return await finalizeScan(validOcrVin.toUpperCase());
+        }
       }
 
-      setStatus("No VIN detected. Reposition and try again.");
+      setStatus("No VIN detected. Try again.");
       await Haptics.impact({ style: ImpactStyle.Heavy });
     } catch (error) {
       console.error("Scanning process aborted:", error);
@@ -101,12 +131,11 @@ const VinScanner = ({ onDetected }) => {
     await Haptics.impact({ style: ImpactStyle.Medium });
     const vehicleData = await fetchVehicleDetails(vin);
     setStatus(`Verified: ${vehicleData.year || ''} ${vehicleData.make || ''}`);
-    onDetected(vehicleData);
+    if (onDetected) onDetected(vehicleData);
   };
 
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-sm mx-auto p-4">
-      {/* Visual Status Indicator */}
       <div className="w-full flex justify-center">
         <div className="bg-slate-900 border border-slate-800 text-blue-400 px-6 py-2 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg">
           {status}
@@ -123,7 +152,7 @@ const VinScanner = ({ onDetected }) => {
         {loading ? (
           <div className="flex flex-col items-center gap-2">
             <div className="animate-spin h-6 w-6 border-4 border-white border-t-transparent rounded-full" />
-            <span className="opacity-50 text-[8px]">Processing Image...</span>
+            <span className="opacity-50 text-[8px]">Processing...</span>
           </div>
         ) : (
           <>

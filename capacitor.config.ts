@@ -3,15 +3,21 @@ import { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.vinpro.app',
   appName: 'VinPro',
-  webDir: 'dist', 
+  // ✅ FIX: CRA uses 'build', Vite uses 'dist'
+  webDir: 'build', 
 
   server: {
-    // 🔌 LIVE RELOAD: Ensure this matches your dev machine IP
-    // Note: Comment out 'url' for production builds!
+    // 🔌 LIVE RELOAD: Physical phone connects to your PC IP
     url: "http://192.168.0.73:3000", 
-    cleartext: true,
-    androidScheme: 'https',
+    cleartext: true, 
+    
+    // ✅ Keep as http to match your dev server protocol
+    androidScheme: 'http', 
+    
     allowNavigation: [
+      '192.168.0.73:5000',
+      '192.168.0.73:3000',
+      'http://192.168.0.73/*', 
       '*.chase.com',
       '*.wellsfargo.com',
       '*.bankofamerica.com',
@@ -23,15 +29,15 @@ const config: CapacitorConfig = {
     buildOptions: {
       releaseType: 'AAB',
     },
+    // ✅ Crucial for loading vehicle photos from http://192.168.0.73:5000/uploads
     allowMixedContent: true,
     captureInput: true,
-    // Android 16 Edge-to-Edge support
     backgroundColor: "#020617"
   },
 
   plugins: {
     Keyboard: {
-      resize: 'body', // Important: Pushes the UI up so inputs stay visible
+      resize: 'body', 
       style: 'dark',
     },
 
@@ -45,9 +51,9 @@ const config: CapacitorConfig = {
     SplashScreen: {
       launchShowDuration: 1500,
       launchAutoHide: true,
-      backgroundColor: "#020617", // Matches your Slate-950 theme
+      backgroundColor: "#020617",
       showSpinner: true,
-      spinnerColor: "#2563eb",    // VinPro Blue
+      spinnerColor: "#2563eb",
       androidScaleType: "CENTER_CROP",
       splashFullScreen: true,
       splashImmersive: true,

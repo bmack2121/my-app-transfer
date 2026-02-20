@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { io } from "socket.io-client";
+// ✅ Import the custom hook instead of socket.io-client
+import { useSocket } from "../context/SocketProvider"; 
 import axiosClient from "../api/axiosClient";
-import DashboardCharts from "../components/DashboardCharts";
 import ActivityFeedItem from "../components/ActivityFeedItem";
 import { useDarkMode } from "../hooks/useDarkMode";
 import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
@@ -10,6 +10,9 @@ import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
 const Dashboard = () => {
   const { isDark, toggleDark } = useDarkMode();
   const navigate = useNavigate();
+  
+  // ✅ Tap into the global mobile-optimized socket
+  const { socket, isConnected } = useSocket(); 
 
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -25,19 +28,24 @@ const Dashboard = () => {
 
   // --- 🛰️ Live Pulse Socket Integration ---
   useEffect(() => {
-    // Establishing real-time link to the VinPro Engine
-    const socket = io("http://192.168.0.73:5000"); 
+    // Wait until the global provider has initialized the socket
+    if (!socket) return;
 
-    socket.on("new-activity", (newActivity) => {
+    const handleNewActivity = (newActivity) => {
       // ⚡ Instant Feed Update
       setActivity((prev) => [newActivity, ...prev].slice(0, 15));
-
-      // 📳 Physical feedback based on severity (Success/Critical/Info)
+      // 📳 Physical feedback based on severity
       triggerLiveHaptic(newActivity.level);
-    });
+    };
 
-    return () => socket.disconnect();
-  }, []);
+    socket.on("new-activity", handleNewActivity);
+
+    // ✅ Clean up the listener when leaving the dashboard, 
+    // BUT DO NOT disconnect the socket itself since the rest of the app shares it.
+    return () => {
+      socket.off("new-activity", handleNewActivity);
+    };
+  }, [socket]);
 
   const triggerLiveHaptic = async (level) => {
     try {
@@ -48,7 +56,7 @@ const Dashboard = () => {
       } else {
         await Haptics.impact({ style: ImpactStyle.Light });
       }
-    } catch (e) { /* Fallback for desktop */ }
+    } catch (e) { /* Fallback for desktop/emulator */ }
   };
 
   // --- 📊 Data Synchronization ---
@@ -56,30 +64,29 @@ const Dashboard = () => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        // Hits the updated dashboardController endpoint
         const res = await axiosClient.get("/dashboard/stats");
         
         if (res.data) {
           setStats({
-            activeListings: res.data.stats.unitsOnLot,
-            todaysLeads: res.data.stats.newLeadsToday,
-            pendingDeals: res.data.stats.activeDeals,
-            avgDaysOnLot: res.data.stats.avgAging,
-            totalLotValue: res.data.stats.totalLotValue,
-            marketHealth: res.data.stats.marketHealthScore
+            activeListings: res.data.stats.unitsOnLot || 0,
+            todaysLeads: res.data.stats.newLeadsToday || 0,
+            pendingDeals: res.data.stats.activeDeals || 0,
+            avgDaysOnLot: res.data.stats.avgAging || 0,
+            totalLotValue: res.data.stats.totalLotValue || 0,
+            marketHealth: res.data.stats.marketHealthScore || "Unknown"
           });
           setActivity(res.data.feed || []);
         }
       } catch (err) {
         if (err.response?.status === 401) {
-          navigate("/login");
+          // Handled safely by axiosClient interceptor now, but fallback here just in case
         }
       } finally {
         setLoading(false);
       }
     };
     fetchDashboardData();
-  }, [navigate]);
+  }, []);
 
   const handleAction = async (route) => {
     try { await Haptics.impact({ style: ImpactStyle.Light }); } catch (e) {}
@@ -88,8 +95,9 @@ const Dashboard = () => {
 
   if (loading) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
-        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+      <div className={`min-h-screen flex flex-col items-center justify-center ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
+        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500 animate-pulse">Syncing Engine...</p>
       </div>
     );
   }
@@ -117,7 +125,7 @@ const Dashboard = () => {
 
       {/* ⚡ Quick Actions */}
       <section className="px-6 mb-8">
-        <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
+        <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar snap-x snap-mandatory">
           {[
             { label: "Scan VIN", icon: "📷", route: "/vin-scanner" },
             { label: "Lead Intake", icon: "📝", route: "/lead-intake" }, 
@@ -127,7 +135,7 @@ const Dashboard = () => {
             <button
               key={action.label}
               onClick={() => handleAction(action.route)}
-              className={`flex flex-col items-center justify-center min-w-[110px] h-[110px] gap-2 rounded-[2.5rem] border text-[9px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all ${
+              className={`snap-center flex flex-col items-center justify-center min-w-[110px] h-[110px] gap-2 rounded-[2.5rem] border text-[9px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all ${
                 isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
               }`}
             >
@@ -154,7 +162,7 @@ const Dashboard = () => {
         </div>
 
         {[
-          { label: "Units On Lot", value: stats.activeListings, color: "text-white" },
+          { label: "Units On Lot", value: stats.activeListings, color: isDark ? "text-white" : "text-slate-900" },
           { label: "Today's Leads", value: stats.todaysLeads, color: "text-emerald-500" },
           { label: "Active Deals", value: stats.pendingDeals, color: "text-amber-500" },
           { label: "Avg. Aging", value: `${stats.avgDaysOnLot}D`, color: "text-rose-500" },
@@ -171,16 +179,21 @@ const Dashboard = () => {
         <div className={`rounded-[2.5rem] border p-6 shadow-xl ${isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}>
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-[10px] font-black uppercase tracking-widest opacity-60">Live Lot Activity</h2>
+            
+            {/* ✅ Dynamic Connection Indicator */}
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-              <span className="text-[9px] font-black uppercase text-emerald-500">Pulse Active</span>
+              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></div>
+              <span className={`text-[9px] font-black uppercase ${isConnected ? 'text-emerald-500' : 'text-rose-500'}`}>
+                {isConnected ? 'Pulse Active' : 'Reconnecting...'}
+              </span>
             </div>
+
           </div>
           
           <div className="space-y-4">
             {activity.length > 0 ? (
               activity.map((item) => (
-                <ActivityFeedItem key={item._id} activity={item} />
+                <ActivityFeedItem key={item._id || item.id || Math.random()} activity={item} />
               ))
             ) : (
               <p className="text-center text-[10px] uppercase font-bold text-slate-500 py-4 italic">Listening for lot events...</p>

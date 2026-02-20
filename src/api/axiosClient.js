@@ -2,26 +2,34 @@ import axios from 'axios';
 import { hapticWarning, hapticError } from "../utils/haptics";
 
 const axiosClient = axios.create({
-  // ✅ FIX: Using your development machine's local IP (192.168.0.73) 
-  // This allows the physical phone to reach your Node.js server over Wi-Fi.
+  // Fallback to local IP if environment variable isn't loaded during the build step.
   baseURL: process.env.REACT_APP_API_BASE_URL || "http://192.168.0.73:5000/api", 
-  timeout: 120000,
+  timeout: 120000, // 2 minutes: generous for lot acquisitions/photo uploads
+  
+  // Required for maintaining sessions across requests (must match backend CORS)
+  withCredentials: true, 
+
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-// 📤 Request Interceptor: Auth & FormData Handling
+/* -------------------------------------------
+ * 📤 REQUEST INTERCEPTOR
+ * ------------------------------------------- */
 axiosClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
+    
+    // ✅ FIX: Use Axios 1.x compliant header setting
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers.set('Authorization', `Bearer ${token}`);
     }
 
-    // Auto-detect FormData (important for future image/video uploads)
+    // Auto-detect FormData for vehicle photo/video uploads
     if (config.data instanceof FormData) {
-      delete config.headers["Content-Type"];
+      // ✅ FIX: Use Axios 1.x compliant header deletion
+      config.headers.delete("Content-Type");
     }
 
     return config;
@@ -29,32 +37,37 @@ axiosClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// 📥 Response Interceptor: Resilience & Session Management
+/* -------------------------------------------
+ * 📥 RESPONSE INTERCEPTOR
+ * ------------------------------------------- */
 axiosClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const { response, code, config } = error;
 
-    // 1. Handle Network/Timeout Errors (Common on dealership lots)
-    // ERR_NETWORK usually means the IP is wrong or the server is down.
-    if (code === "ECONNABORTED" || code === "ERR_NETWORK") {
-      await hapticWarning();
-      console.error(`🏁 VinPro Sync Timeout: Failed to reach ${config.baseURL}. Check IP.`);
+    // 1. Handle Connectivity Failures (Physical device range issues on the lot)
+    if (code === "ECONNABORTED" || code === "ERR_NETWORK" || !response) {
+      await hapticWarning().catch(() => {}); // Catch prevents unhandled promise if haptics fail
+      console.error(`🏁 VinPro Sync: Unreachable. Target: ${config?.baseURL}. Check .73 IP.`);
     }
 
-    // 2. Handle Session Expiry (401)
+    // 2. Handle Unauthorized / Expired Sessions
     if (response?.status === 401) {
-      await hapticError();
+      await hapticError().catch(() => {});
       localStorage.removeItem("token");
 
+      // ✅ FIX: Use History API for a seamless client-side route change 
+      // instead of window.location.href to prevent a white-screen reload in Capacitor
       if (!window.location.pathname.includes("/login")) {
-        window.location.href = "/login?expired=true";
+        window.history.pushState({}, '', '/login?expired=true');
+        // Dispatch a custom event so your React Router can pick up the change natively
+        window.dispatchEvent(new Event('popstate')); 
       }
     }
 
-    // 3. Handle Backend Validation Errors (The "Did not save" issue)
+    // 3. Handle Bad Requests / Validation Errors
     if (response?.status === 400) {
-      console.warn("Validation Error:", response.data.message);
+      console.warn("VinPro Engine - Validation Error:", response.data?.message || "Invalid data");
     }
 
     return Promise.reject(error);

@@ -1,82 +1,92 @@
-/* Reset some default styles */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+/* If you are using Tailwind, these three directives MUST be at the top */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  /* Updated to a dark theme consistent with your VinPro UI */
-  background-color: #020617; 
-  color: #f8fafc;
-  line-height: 1.6;
-  transition: background-color 0.2s ease;
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #020617; 
+    color: #f8fafc;
+    line-height: 1.6;
+    transition: background-color 0.2s ease;
+    
+    /* ✅ MOBILE FIX: Prevent blue highlight flash on mobile taps */
+    -webkit-tap-highlight-color: transparent;
+    
+    /* ✅ MOBILE FIX: Prevent "rubber-band" overscroll bouncing on iOS/Android */
+    overscroll-behavior-y: none;
+    
+    /* ✅ MOBILE FIX: Prevent accidental text highlighting while holding the phone */
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Allow text selection only inside inputs and textareas */
+  input, textarea {
+    user-select: auto;
+    -webkit-user-select: auto;
+  }
 }
 
 /* -------------------------------------------
  * VINPRO NATIVE SCANNER BRIDGE
- * This is the fix for the "Black Screen" issue
  * ----------------------------------------- */
 
-/* When scanning, we must make the app invisible */
+/* High-priority transparency for all possible parent wrappers */
 body.scanner-active, 
 body.scanner-active #root,
-body.scanner-active main {
+body.scanner-active main,
+body.scanner-active [class*="layout"],
+body.scanner-active [class*="container"] {
   background: transparent !important;
   background-color: transparent !important;
 }
 
-/* Force transparency on any container with a background color */
-body.scanner-active .min-h-screen,
-body.scanner-active .bg-slate-900,
-body.scanner-active .bg-slate-950 {
-  background-color: transparent !important;
+/* Hide specific UI blocks defined in your Pages */
+body.scanner-active .no-scan-ui {
+  display: none !important;
 }
 
 /* -------------------------------------------
- * STANDARD UI STYLES
+ * SCANNER LASER ANIMATION
  * ----------------------------------------- */
 
-input, button, select, textarea {
-  font-family: inherit;
-  font-size: 1rem;
-  padding: 12px;
-  margin: 8px 0;
-  border-radius: 12px;
-  outline: none;
+.scanner-laser {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(to right, transparent, #3b82f6, transparent);
+  box-shadow: 0 0 15px 2px rgba(59, 130, 246, 0.8);
+  animation: scan-move 2s infinite ease-in-out;
+  z-index: 10;
 }
 
-/* The "Authorize" and "Scan" buttons */
-button {
-  background-color: #3b82f6;
-  color: white;
-  border: none;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
+@keyframes scan-move {
+  0% { top: 0%; }
+  50% { top: 100%; }
+  100% { top: 0%; }
 }
 
-button:hover {
-  background-color: #2563eb;
-  transform: translateY(-1px);
-}
+/* -------------------------------------------
+ * CUSTOM UTILITIES
+ * ----------------------------------------- */
+@layer utilities {
+  .shadow-glow {
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+  }
 
-button:active {
-  transform: scale(0.98);
-}
-
-a {
-  color: #60a5fa;
-  text-decoration: none;
-  font-weight: 600;
-}
-
-a:hover {
-  text-decoration: underline;
-}
-
-/* Utility for the spinner and status messages */
-.shadow-glow {
-  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+  /* Hide scrollbar for a cleaner mobile app UI */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }
