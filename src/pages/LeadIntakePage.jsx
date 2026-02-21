@@ -4,7 +4,7 @@ import DLScanner from '../components/Sales/DLScanner';
 import VinScanner from '../components/VinScanner'; 
 import axiosClient from '../api/axiosClient';
 import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
-import { Save, User, MapPin, Calendar, ArrowLeft, Car, Phone, Mail } from 'lucide-react';
+import { Save, User, MapPin, ArrowLeft, Car, Phone, Mail } from 'lucide-react';
 
 const LeadIntakePage = () => {
   const navigate = useNavigate();
@@ -26,7 +26,7 @@ const LeadIntakePage = () => {
   });
 
   const triggerHaptic = async (style = ImpactStyle.Light) => {
-    try { await Haptics.impact({ style }); } catch (e) {}
+    try { await Haptics.impact({ style }); } catch (e) { /* silent fail for web */ }
   };
 
   // Triggered when the DLScanner successfully parses a license
@@ -108,8 +108,7 @@ const LeadIntakePage = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white pt-safe pb-32">
-      {/* The 'no-scan-ui' class hides this block when the native camera lens opens */}
-      <div className="no-scan-ui p-6">
+      <div className="p-6">
         
         <header className="flex items-center gap-4 mb-8">
           <button 
@@ -125,7 +124,7 @@ const LeadIntakePage = () => {
         </header>
 
         <div className="space-y-6">
-          {/* ?? Top Action Section: Scanners */}
+          {/* Top Action Section: Scanners */}
           <div className="grid grid-cols-2 gap-4">
              <DLScanner onLeadCaptured={handleDLData} />
              <VinScanner onDetected={handleVinData} />
@@ -145,7 +144,7 @@ const LeadIntakePage = () => {
           ) : (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
               
-              {/* ?? Customer Information */}
+              {/* Customer Information */}
               <section className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 space-y-4 shadow-xl">
                 <div className="flex items-center gap-2 text-blue-500 mb-4">
                   <User size={18} className="stroke-[2.5px]" />
@@ -167,7 +166,7 @@ const LeadIntakePage = () => {
                   />
                 </div>
                 
-                {/* ? Added Contact Fields */}
+                {/* Contact Fields */}
                 <div className="grid grid-cols-1 gap-4">
                   <div className="relative">
                     <Phone size={16} className="absolute left-4 top-4 text-slate-500" />
@@ -203,7 +202,7 @@ const LeadIntakePage = () => {
                 </div>
               </section>
 
-              {/* ?? Vehicle Information (Auto-filled by VinScanner) */}
+              {/* Vehicle Information (Auto-filled by VinScanner) */}
               {(leadData.vin || leadData.vehicleMake) && (
                 <section className="bg-blue-600/10 p-6 rounded-[2.5rem] border border-blue-500/20 space-y-4 animate-in zoom-in-95">
                   <div className="flex items-center gap-2 text-blue-400 mb-2">
@@ -221,7 +220,7 @@ const LeadIntakePage = () => {
                 </section>
               )}
 
-              {/* ?? Submit Button */}
+              {/* Submit Button */}
               <button 
                 onClick={handleSaveLead}
                 disabled={isSubmitting || !leadData.firstName}

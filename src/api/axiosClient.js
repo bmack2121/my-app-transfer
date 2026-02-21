@@ -1,9 +1,14 @@
 import axios from 'axios';
 import { hapticWarning, hapticError } from "../utils/haptics";
 
+// ✅ FIX: Safely support both Vite and Create React App environment variables
+const API_URL = 
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL) || 
+  (typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_BASE_URL) || 
+  "http://192.168.0.73:5000/api";
+
 const axiosClient = axios.create({
-  // Fallback to local IP if environment variable isn't loaded during the build step.
-  baseURL: process.env.REACT_APP_API_BASE_URL || "http://192.168.0.73:5000/api", 
+  baseURL: API_URL, 
   timeout: 120000, // 2 minutes: generous for lot acquisitions/photo uploads
   
   // Required for maintaining sessions across requests (must match backend CORS)
@@ -21,14 +26,15 @@ axiosClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
     
-    // ✅ FIX: Use Axios 1.x compliant header setting
+    // Use Axios 1.x compliant header setting
     if (token) {
       config.headers.set('Authorization', `Bearer ${token}`);
     }
 
     // Auto-detect FormData for vehicle photo/video uploads
     if (config.data instanceof FormData) {
-      // ✅ FIX: Use Axios 1.x compliant header deletion
+      // Axios automatically calculates the multipart/form-data boundary. 
+      // We MUST delete the manual JSON header so it doesn't overwrite it.
       config.headers.delete("Content-Type");
     }
 
@@ -48,7 +54,7 @@ axiosClient.interceptors.response.use(
     // 1. Handle Connectivity Failures (Physical device range issues on the lot)
     if (code === "ECONNABORTED" || code === "ERR_NETWORK" || !response) {
       await hapticWarning().catch(() => {}); // Catch prevents unhandled promise if haptics fail
-      console.error(`🏁 VinPro Sync: Unreachable. Target: ${config?.baseURL}. Check .73 IP.`);
+      console.error(`🏁 VinPro Sync: Unreachable. Target: ${config?.baseURL}.`);
     }
 
     // 2. Handle Unauthorized / Expired Sessions
@@ -56,11 +62,11 @@ axiosClient.interceptors.response.use(
       await hapticError().catch(() => {});
       localStorage.removeItem("token");
 
-      // ✅ FIX: Use History API for a seamless client-side route change 
+      // Use History API for a seamless client-side route change 
       // instead of window.location.href to prevent a white-screen reload in Capacitor
       if (!window.location.pathname.includes("/login")) {
         window.history.pushState({}, '', '/login?expired=true');
-        // Dispatch a custom event so your React Router can pick up the change natively
+        // Dispatch a custom event so React Router picks up the change natively
         window.dispatchEvent(new Event('popstate')); 
       }
     }

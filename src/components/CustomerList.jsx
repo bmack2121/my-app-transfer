@@ -4,11 +4,14 @@ import CustomerCard from './CustomerCard';
 const CustomerList = ({ customers }) => {
   const [searchTerm, setSearchTerm] = useState("");
 
-  // 1. Filter Logic: Search by Name or Phone
-  const filteredCustomers = customers?.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.phone?.includes(searchTerm)
-  ) || [];
+  // ✅ FIX: Added Optional Chaining (?.) and fallback ("") to prevent "can't access property toLowerCase"
+  const filteredCustomers = customers?.filter(c => {
+    const name = c.name?.toLowerCase() || ""; 
+    const phone = c.phone || "";
+    const term = searchTerm.toLowerCase();
+
+    return name.includes(term) || phone.includes(searchTerm);
+  }) || [];
 
   // 2. Handle Empty State
   if (!customers || customers.length === 0) {
@@ -54,8 +57,6 @@ const CustomerList = ({ customers }) => {
           />
         </div>
       </div>
-
-      
 
       {/* 5. Alerts Section */}
       {missingVideoCount > 0 && searchTerm === "" && (

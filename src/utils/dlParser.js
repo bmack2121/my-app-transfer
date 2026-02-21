@@ -28,36 +28,61 @@ export const parseDLData = (rawData) => {
     dobRaw: "DBB"
   };
 
-  // Split by line breaks to handle different scanner behaviors (\r, \n, or both)
+  // Split by line breaks. 
   const lines = rawData.split(/[\r\n]+/);
 
   Object.entries(fieldMap).forEach(([key, code]) => {
-    // Find the line that starts with the 3-character identifier
-    const line = lines.find(l => l.includes(code));
+    // ✅ FIX: Use startsWith instead of includes to prevent false-positive matches
+    const line = lines.find(l => l.trim().startsWith(code));
     
     if (line) {
-      // Extract everything after the 3-letter code
-      const value = line.substring(line.indexOf(code) + 3).trim();
-      data[key] = value;
+      // Extract everything exactly after the 3-letter code
+      data[key] = line.trim().substring(3).trim();
+    } else {
+      // ✅ FIX: Fallback for un-split strings (some Android scanners strip newlines)
+      const regex = new RegExp(`${code}(.*?)(?=[A-Z]{3}|$)`);
+      const match = rawData.match(regex);
+      if (match && match[1]) {
+         data[key] = match[1].trim();
+      }
     }
   });
 
-  // ✅ MM/DD/YYYY Formatting with Validation
+  // ✅ FIX: Smarter Date of Birth Parsing (Handles both YYYYMMDD and MMDDYYYY)
   if (data.dobRaw && data.dobRaw.length === 8) {
-    const y = data.dobRaw.substring(0, 4);
-    const m = data.dobRaw.substring(4, 6);
-    const d = data.dobRaw.substring(6, 8);
+    const firstFour = data.dobRaw.substring(0, 4);
     
-    // Ensure the year starts with 19 or 20 to avoid junk data
-    if (y.startsWith('19') || y.startsWith('20')) {
+    if (firstFour.startsWith('19') || firstFour.startsWith('20')) {
+      // Format is YYYYMMDD
+      const y = firstFour;
+      const m = data.dobRaw.substring(4, 6);
+      const d = data.dobRaw.substring(6, 8);
+      data.dob = `${m}/${d}/${y}`;
+    } else {
+      // Format is MMDDYYYY
+      const m = data.dobRaw.substring(0, 2);
+      const d = data.dobRaw.substring(2, 4);
+      const y = data.dobRaw.substring(4, 8);
       data.dob = `${m}/${d}/${y}`;
     }
   }
 
-  // Clean up Zip Codes (some states append 4-digit extensions)
+  // Clean up Zip Codes (strip the +4 extension for cleaner CRM data)
   if (data.zip && data.zip.length > 5) {
     data.zip = data.zip.substring(0, 5);
   }
+
+  // ✅ FIX: Title Case formatter for ALL CAPS AAMVA data
+  const toTitleCase = (str) => {
+    if (!str) return '';
+    return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+  };
+
+  data.firstName = toTitleCase(data.firstName);
+  data.lastName = toTitleCase(data.lastName);
+  data.middleName = toTitleCase(data.middleName);
+  data.city = toTitleCase(data.city);
+  data.address = toTitleCase(data.address);
 
   // Combine names for the VinPro UI
   data.fullName = `${data.firstName || ''} ${data.lastName || ''}`.trim();

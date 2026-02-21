@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    /* Capacitor 8 / Mobile Notch Handling */
+    /* Capacitor / Mobile Notch Handling */
     --safe-area-top: env(safe-area-inset-top, 0px);
     --safe-area-bottom: env(safe-area-inset-bottom, 0px);
     --safe-area-left: env(safe-area-inset-left, 0px);
@@ -26,24 +26,18 @@
     @apply h-full m-0 p-0 font-sans select-none overflow-hidden;
     @apply bg-slate-950 text-slate-200;
     
-    /* Required for Android 16 Edge-to-Edge scaling */
+    /* Required for Android Edge-to-Edge scaling */
     -webkit-text-size-adjust: 100%;
-  }
-
-  /* ✅ FIXED: Specific transparency logic for the ML Kit Scanner */
-  body.scanner-active {
-    @apply bg-transparent !important;
-  }
-
-  body.scanner-active #root,
-  body.scanner-active main,
-  body.scanner-active .layout-container {
-    @apply bg-transparent !important;
   }
 
   #root {
     @apply h-full flex flex-col;
   }
+
+  /* Custom Scrollbars (Automotive/Dark Theme) */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-slate-800 rounded-full hover:bg-blue-600 transition-colors; }
 }
 
 @layer components {
@@ -102,8 +96,3 @@
     scrollbar-width: none;
   }
 }
-
-/* Custom Scrollbars (Automotive/Dark Theme) */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { @apply bg-transparent; }
-::-webkit-scrollbar-thumb { @apply bg-slate-800 rounded-full hover:bg-blue-600 transition-colors; }

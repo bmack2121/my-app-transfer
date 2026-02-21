@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import VinScanner from "../components/VinScanner";
 import axiosClient from "../api/axiosClient";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
-import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics"; // ✅ Standardize imports
+import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
 
 const InventoryForm = ({ onAdd }) => {
   const [loading, setLoading] = useState(false);
@@ -26,37 +26,37 @@ const InventoryForm = ({ onAdd }) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  // ✅ Trigger Haptic (Integrated directly for safety)
   const triggerHaptic = async (style = ImpactStyle.Light) => {
     try { await Haptics.impact({ style }); } catch (e) {}
   };
 
+  /**
+   * ✅ FIX: Optimized to a single backend call. 
+   * Your backend decodeVin already fetches MarketCheck data internally.
+   */
   const handleVinDetected = async (vin) => {
     try {
       setLoading(true);
       setShowScanner(false);
       await triggerHaptic(ImpactStyle.Heavy);
 
-      // ✅ Use Promise.allSettled to ensure decoding works even if market data fails
-      const results = await Promise.allSettled([
-        axiosClient.get(`/vin/decode/${vin}`),
-        axiosClient.get(`/marketcheck/market-value/${vin}`) // ✅ Matches our new route
-      ]);
+      // Single call handles both NHTSA and MarketCheck on the server
+      const response = await axiosClient.get(`/inventory/decode/${vin}`);
+      const data = response.data;
 
-      const decodeRes = results[0].status === 'fulfilled' ? results[0].value.data : {};
-      const marketRes = results[1].status === 'fulfilled' ? results[1].value.data : null;
-
-      if (marketRes) setMarketData(marketRes);
+      setMarketData({
+        market_average: data.marketAverage,
+        msrp: data.msrp
+      });
 
       setForm((prev) => ({
         ...prev,
-        vin: vin.toUpperCase(),
-        year: decodeRes.year || "",
-        make: decodeRes.make || "",
-        model: decodeRes.model || "",
-        trim: decodeRes.trim || "",
-        // Default the listing price to the market average if available
-        price: marketRes?.market_average || ""
+        vin: data.vin,
+        year: data.year || "",
+        make: data.make || "",
+        model: data.model || "",
+        trim: data.trim || "Base",
+        price: data.marketAverage || ""
       }));
 
       try { await Haptics.notification({ type: NotificationType.Success }); } catch (e) {}
@@ -75,23 +75,34 @@ const InventoryForm = ({ onAdd }) => {
     
     setLoading(true);
     try {
+      // 1. Save the vehicle record
       const response = await axiosClient.post('/inventory', form);
       const newVehicleId = response.data._id;
+      const currentStock = form.stockNumber || "VINPRO";
 
       await triggerHaptic(ImpactStyle.Medium);
 
-      // ✅ Lot Photo Workflow
+      // 2. High-Performance Photo Workflow
       const confirmPhoto = window.confirm("Unit Saved! Snap the primary lot photo?");
       if (confirmPhoto) {
         const image = await Camera.getPhoto({
-          quality: 90,
+          quality: 80, // Slightly reduced for faster upload
           allowEditing: false,
           source: CameraSource.Camera,
-          resultType: CameraResultType.Base64
+          resultType: CameraResultType.Uri // ✅ URI prevents memory crashes
         });
 
-        await axiosClient.post(`/inventory/${newVehicleId}/image`, {
-          image: image.base64String
+        // Convert URI to Blob for Multipart/FormData
+        const imgResponse = await fetch(image.webPath);
+        const blob = await imgResponse.blob();
+
+        const formData = new FormData();
+        formData.append("stockNumber", currentStock); // Appended first for backend filename logic
+        formData.append("photos", blob, `${currentStock}-primary.jpg`);
+
+        // Send to the PUT route handled by Multer
+        await axiosClient.put(`/inventory/${newVehicleId}`, formData, {
+          headers: { "Content-Type": "multipart/form-data" }
         });
       }
 
@@ -101,6 +112,7 @@ const InventoryForm = ({ onAdd }) => {
 
     } catch (err) {
       console.error("VinPro Save Error:", err);
+      alert("Sync failed. Check terminal for ADB errors.");
     } finally {
       setLoading(false);
     }
@@ -166,22 +178,18 @@ const InventoryForm = ({ onAdd }) => {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <InputField label="VIN" name="vin" placeholder="Enter 17-digit VIN" />
-
         <div className="grid grid-cols-2 gap-4">
           <InputField label="Year" name="year" placeholder="Year" type="number" />
           <InputField label="Stock #" name="stockNumber" placeholder="STK-000" />
         </div>
-
         <div className="grid grid-cols-2 gap-4">
           <InputField label="Make" name="make" placeholder="Make" />
           <InputField label="Model" name="model" placeholder="Model" />
         </div>
-
         <div className="grid grid-cols-2 gap-4">
           <InputField label="Trim" name="trim" placeholder="Trim" />
           <InputField label="Price" name="price" placeholder="Price" type="number" symbol="$" />
         </div>
-
         <button
           type="submit"
           disabled={loading}

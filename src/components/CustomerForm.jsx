@@ -21,22 +21,40 @@ const CustomerForm = ({ onAdd }) => {
   const handleScanLicense = async () => {
     try {
       setLoading(true);
+      // ? MEMORY FIX: Switch to Uri instead of Base64
       const image = await Camera.getPhoto({
         quality: 90, 
         source: CameraSource.Camera, 
-        resultType: CameraResultType.Base64
+        resultType: CameraResultType.Uri
       });
       
+      // ? OCR FIX: ML Kit needs the base64 string for the actual detection
+      // We fetch it locally so it doesn't linger in React state
+      const imgRes = await fetch(image.webPath);
+      const blob = await imgRes.blob();
+      const base64Image = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+        reader.readAsDataURL(blob);
+      });
+
       const result = await CapacitorPluginMlKitTextRecognition.detectText({
-        base64Image: image.base64String, 
+        base64Image: base64Image, 
         rotation: 0
       });
 
       const rawLines = result.text.split('\n').map(l => l.trim());
-      const names = rawLines.filter(l => l.length > 2 && !/\d/.test(l) && !/USA|DL|DOT/i.test(l));
+      
+      // ? ROBUST FILTER: Remove addresses, dates, and DL headers
+      const filteredNames = rawLines.filter(l => 
+        l.length > 2 && 
+        !/\d/.test(l) && 
+        !/USA|DL|DOT|ISSUE|EXPIRES|CLASS|STREET|AVE|DRIVE/i.test(l)
+      );
 
-      if (names.length >= 1) {
-        const full = names[1] ? `${names[1]} ${names[0]}` : names[0];
+      if (filteredNames.length >= 1) {
+        // Assume the first two non-filtered lines are the name
+        const full = filteredNames.slice(0, 2).join(' ');
         setForm(prev => ({ ...prev, name: full.toUpperCase(), isScanned: true }));
         await hapticHeavy();
       }
@@ -50,6 +68,9 @@ const CustomerForm = ({ onAdd }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Safety check for the name field to prevent the "toLowerCase" crash in the list
+    if (!form.name.trim()) return alert("Customer name is required.");
+    
     await onAdd(form);
     await hapticSuccess();
     setForm({ name: '', phone: '', email: '', leadSource: 'Walk-in', notes: '', isScanned: false });
@@ -66,14 +87,13 @@ const CustomerForm = ({ onAdd }) => {
           type="button" 
           onClick={handleScanLicense} 
           disabled={loading}
-          className="bg-slate-900 text-white p-3 rounded-xl hover:bg-indigo-600 transition-colors active:scale-95"
+          className={`p-3 rounded-xl transition-all active:scale-95 ${form.isScanned ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-white'}`}
         >
           {loading ? <Loader2 className="animate-spin" size={20} /> : <CreditCard size={20} />}
         </button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Name Field with User Icon */}
         <div className="relative">
           <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
           <input 
@@ -86,7 +106,6 @@ const CustomerForm = ({ onAdd }) => {
           />
         </div>
 
-        {/* Phone Field with Phone Icon */}
         <div className="relative">
           <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
           <input 
@@ -99,7 +118,6 @@ const CustomerForm = ({ onAdd }) => {
           />
         </div>
 
-        {/* Email Field with Mail Icon */}
         <div className="relative">
           <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
           <input 
@@ -112,7 +130,6 @@ const CustomerForm = ({ onAdd }) => {
           />
         </div>
 
-        {/* Notes Field with FileText Icon */}
         <div className="relative">
           <FileText className="absolute left-4 top-5 text-slate-300" size={18} />
           <textarea 

@@ -1,16 +1,13 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { BarcodeScanner, BarcodeFormat } from "@capacitor-mlkit/barcode-scanning";
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
-// ✅ Wildcard import bypasses Webpack's strict named-export errors for OCR
 import * as OCRPlugin from '@pantrist/capacitor-plugin-ml-kit-text-recognition';
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import { 
   ArrowLeftIcon, 
   PencilIcon, 
   XMarkIcon, 
-  BoltIcon,
-  BoltSlashIcon,
   QrCodeIcon,
   DocumentTextIcon
 } from "@heroicons/react/24/outline";
@@ -21,7 +18,7 @@ import ScanHistory from "../components/ScanHistory";
  */
 const validateVIN = (vin) => {
   if (!vin) return false;
-  let v = vin.toUpperCase().trim().replace(/I/g, '1').replace(/O/g, '0');
+  let v = vin.toUpperCase().trim().replace(/I/g, '1').replace(/[OQ]/g, '0'); // Catch Q as well
   if (v.length !== 17) return false;
   
   const map = { 
@@ -46,23 +43,22 @@ const validateVIN = (vin) => {
 
 const VinScannerPage = () => {
   const [status, setStatus] = useState("Ready to scan");
-  const [isScanning, setIsScanning] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [manualVin, setManualVin] = useState("");
-  const [torchOn, setTorchOn] = useState(false);
   const [history, setHistory] = useState([]);
   
   const navigate = useNavigate();
-  const isScanningRef = useRef(false);
 
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("vin_history") || "[]");
     setHistory(saved);
-    return () => { stopScanning(); };
   }, []);
 
-  // ✅ Integrates NHTSA Fetching from the original component
+  const triggerHaptic = async (style = ImpactStyle.Light) => {
+    try { await Haptics.impact({ style }); } catch (e) {}
+  };
+
   const fetchVehicleDetails = async (vin) => {
     try {
       const response = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${vin}?format=json`);
@@ -74,13 +70,10 @@ const VinScannerPage = () => {
     }
   };
 
-  // ✅ Unified Success Handler (Hits API -> Saves History -> Navigates)
   const handleSuccess = async (vin) => {
     if (!vin) return;
     
-    await Haptics.impact({ style: ImpactStyle.Heavy });
-    await stopScanning(); 
-    
+    await triggerHaptic(ImpactStyle.Heavy);
     setIsProcessing(true);
     setStatus("Querying NHTSA Database...");
     
@@ -102,16 +95,7 @@ const VinScannerPage = () => {
     navigate(`/vin-result/${vin}`);
   };
 
-  const toggleTorch = async () => {
-    try {
-      if (isScanning) {
-        await BarcodeScanner.toggleTorch();
-        setTorchOn(prev => !prev);
-      }
-    } catch (err) { console.warn("Torch unavailable"); }
-  };
-
-  // 📸 SCAN MODE 1: Live Barcode (Best for Door Jambs)
+  // 📸 SCAN MODE 1: Live Barcode (Native Overlay)
   const startBarcodeScan = async () => {
     try {
       const { camera } = await BarcodeScanner.checkPermissions();
@@ -126,36 +110,32 @@ const VinScannerPage = () => {
         await BarcodeScanner.installGoogleBarcodeScannerModule();
       }
 
-      await BarcodeScanner.addListener('barcodesScanned', async (result) => {
-        if (result.barcodes.length > 0) {
-          const rawVin = result.barcodes[0].rawValue.toUpperCase();
-          const vin = rawVin.length > 17 ? rawVin.slice(-17) : rawVin;
-          
-          if (validateVIN(vin)) {
-            await BarcodeScanner.removeAllListeners();
-            handleSuccess(vin);
-          } 
+      // ✅ FIX: Native .scan() requires DataMatrix for modern auto door jambs
+      const { barcodes } = await BarcodeScanner.scan({
+        formats: [BarcodeFormat.Code128, BarcodeFormat.Code39, BarcodeFormat.DataMatrix], 
+      });
+      
+      if (barcodes && barcodes.length > 0) {
+        const rawVin = (barcodes[0].displayValue || barcodes[0].rawValue || "").toUpperCase();
+        const vin = rawVin.length > 17 ? rawVin.slice(-17) : rawVin;
+        
+        if (validateVIN(vin)) {
+          handleSuccess(vin);
+        } else {
+          alert(`Scanned barcode (${vin}) failed VIN checksum validation.`);
         }
-      });
-
-      setIsScanning(true);
-      isScanningRef.current = true;
-      document.body.classList.add('scanner-active');
-      
-      // ✅ FIX: Silently swallow the Android "Not Implemented" exception
-      await BarcodeScanner.hideBackground().catch(() => {}); 
-      
-      await BarcodeScanner.startScan({
-        formats: [BarcodeFormat.Code128, BarcodeFormat.Code39], 
-      });
-      
+      }
     } catch (err) { 
-      console.error("Scan failed:", err);
-      await stopScanning(); 
+      if (err.message?.includes('canceled') || err.message?.includes('cancelled')) {
+        console.log("User cancelled native scan");
+      } else {
+        console.error("Scan failed:", err);
+        alert("Scanner encountered an error. Please try OCR or Manual entry.");
+      }
     }
   };
 
-  // 📝 SCAN MODE 2: OCR Photo Processing (Best for Dashboards/Titles)
+  // 📝 SCAN MODE 2: OCR Photo Processing
   const startOcrScan = async () => {
     try {
       const perm = await Camera.checkPermissions();
@@ -164,27 +144,36 @@ const VinScannerPage = () => {
         if (req.camera !== 'granted') return alert("Camera permission denied.");
       }
 
-      const image = await Camera.getPhoto({
-        quality: 90,
-        source: CameraSource.Camera,
-        resultType: CameraResultType.Base64,
-      });
+      let image;
+      try {
+        image = await Camera.getPhoto({
+          quality: 90,
+          source: CameraSource.Camera,
+          resultType: CameraResultType.Base64,
+        });
+      } catch (cancelErr) {
+        console.log("OCR capture cancelled by user");
+        return;
+      }
 
       if (!image || !image.base64String) return;
 
       setIsProcessing(true);
       setStatus("Analyzing Image Text...");
 
-      const OCR = Object.values(OCRPlugin).find(v => typeof v === 'object' && v.detectText) || Object.values(OCRPlugin)[0]; 
-      const ocrResult = await OCR.detectText({ base64Image: image.base64String }).catch(() => null);
+      const TextRecognition = Object.values(OCRPlugin).find(v => v && typeof v.detectText === 'function');
+      
+      if (TextRecognition) {
+        const ocrResult = await TextRecognition.detectText({ base64Image: image.base64String }).catch(() => null);
 
-      if (ocrResult?.text) {
-        const cleanedText = ocrResult.text.replace(/[\s\n\t]/g, '');
-        const potentialVins = cleanedText.match(/[A-HJ-NPR-Z0-9]{17}/gi) || [];
-        const validOcrVin = potentialVins.find((v) => validateVIN(v));
+        if (ocrResult?.text) {
+          const cleanedText = ocrResult.text.replace(/[\s\n\t]/g, '');
+          const potentialVins = cleanedText.match(/[A-HJ-NPR-Z0-9]{17}/gi) || [];
+          const validOcrVin = potentialVins.find((v) => validateVIN(v));
 
-        if (validOcrVin) {
-          return await handleSuccess(validOcrVin.toUpperCase());
+          if (validOcrVin) {
+            return await handleSuccess(validOcrVin.toUpperCase());
+          }
         }
       }
 
@@ -196,113 +185,78 @@ const VinScannerPage = () => {
     }
   };
 
-  const stopScanning = async () => {
-    try {
-      await BarcodeScanner.removeAllListeners();
-      await BarcodeScanner.stopScan();
-      
-      // ✅ FIX: Safely restore background for cross-platform compatibility
-      await BarcodeScanner.showBackground().catch(() => {});
-    } catch (e) {}
-    
-    document.body.classList.remove('scanner-active');
-    setIsScanning(false);
-    isScanningRef.current = false;
-    setTorchOn(false);
-  };
-
   const handleManualSubmit = (e) => {
     e.preventDefault();
     if (manualVin.length === 17) handleSuccess(manualVin.toUpperCase());
   };
 
   return (
-    <div className={`min-h-screen transition-all ${isScanning ? "bg-transparent" : "bg-slate-950 text-white"}`}>
+    <div className="min-h-screen bg-slate-950 text-white transition-all">
       
-      {/* Global Navigation Overlay */}
+      {/* Global Navigation */}
       <div className="fixed top-0 left-0 w-full z-[70] p-6 pt-safe flex justify-between items-center pointer-events-none">
         <button 
-          onClick={() => isScanning ? stopScanning() : navigate(-1)}
+          onClick={() => navigate(-1)}
           className="p-3 bg-white/10 backdrop-blur-md rounded-2xl border border-white/5 text-white pointer-events-auto active:scale-90 shadow-lg"
         >
           <ArrowLeftIcon className="w-6 h-6 stroke-[2.5px]" />
         </button>
-
-        {isScanning && (
-          <button 
-            onClick={toggleTorch}
-            className={`p-3 rounded-2xl border border-white/5 pointer-events-auto transition-all shadow-lg ${torchOn ? 'bg-yellow-500 text-black' : 'bg-white/10 text-white'}`}
-          >
-            {torchOn ? <BoltIcon className="w-6 h-6" /> : <BoltSlashIcon className="w-6 h-6" />}
-          </button>
-        )}
       </div>
 
       {/* Full Screen Processing Spinner */}
       {isProcessing && (
-        <div className="fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none">
+        <div className="fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-auto">
            <div className="animate-spin h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full mb-4" />
            <p className="font-black uppercase tracking-widest text-blue-400 text-xs animate-pulse">{status}</p>
         </div>
       )}
 
-      {!isScanning ? (
-        <div className="p-8 pt-32 flex flex-col h-full animate-in fade-in duration-500">
-          <header className="mb-10">
-            <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none">
-              VIN<span className="text-blue-600">PRO</span>
-            </h1>
-            <p className="text-slate-500 text-[9px] font-black uppercase tracking-[0.3em] mt-2">
-              Lot Acquisition Interface
-            </p>
-          </header>
-          
-          <div className="space-y-4 mb-8">
+      <div className="p-8 pt-32 flex flex-col h-full animate-in fade-in duration-500">
+        <header className="mb-10">
+          <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none">
+            VIN<span className="text-blue-600">PRO</span>
+          </h1>
+          <p className="text-slate-500 text-[9px] font-black uppercase tracking-[0.3em] mt-2">
+            Lot Acquisition Interface
+          </p>
+        </header>
+        
+        <div className="space-y-4 mb-8">
+          <button
+            onClick={startBarcodeScan}
+            className="w-full bg-blue-600 py-6 rounded-[2rem] flex items-center justify-center gap-3 shadow-[0_8px_30px_rgba(37,99,235,0.3)] active:scale-95 transition-all"
+          >
+            <QrCodeIcon className="w-8 h-8" />
+            <div className="text-left">
+              <span className="block font-black uppercase tracking-widest text-sm leading-tight">Live Barcode</span>
+              <span className="block text-[10px] text-blue-200 uppercase tracking-wider font-bold">Fastest for Door Jambs</span>
+            </div>
+          </button>
+
+          <div className="grid grid-cols-2 gap-4">
             <button
-              onClick={startBarcodeScan}
-              className="w-full bg-blue-600 py-6 rounded-[2rem] flex items-center justify-center gap-3 shadow-[0_8px_30px_rgba(37,99,235,0.3)] active:scale-95 transition-all"
+              onClick={startOcrScan}
+              className="w-full bg-slate-800 py-4 rounded-3xl flex flex-col items-center justify-center gap-2 border border-slate-700 active:scale-95 transition-all"
             >
-              <QrCodeIcon className="w-8 h-8" />
-              <div className="text-left">
-                <span className="block font-black uppercase tracking-widest text-sm leading-tight">Live Barcode</span>
-                <span className="block text-[10px] text-blue-200 uppercase tracking-wider font-bold">Fastest for Door Jambs</span>
-              </div>
+              <DocumentTextIcon className="w-6 h-6 text-slate-400" />
+              <span className="font-bold uppercase tracking-widest text-[9px] text-slate-400 text-center">Scan Text<br/>(Dashboard)</span>
             </button>
 
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={startOcrScan}
-                className="w-full bg-slate-800 py-4 rounded-3xl flex flex-col items-center justify-center gap-2 border border-slate-700 active:scale-95 transition-all"
-              >
-                <DocumentTextIcon className="w-6 h-6 text-slate-400" />
-                <span className="font-bold uppercase tracking-widest text-[9px] text-slate-400 text-center">Scan Text<br/>(Dashboard)</span>
-              </button>
-
-              <button
-                onClick={() => setShowManualEntry(true)}
-                className="w-full bg-slate-800 py-4 rounded-3xl flex flex-col items-center justify-center gap-2 border border-slate-700 active:scale-95 transition-all"
-              >
-                <PencilIcon className="w-6 h-6 text-slate-400" />
-                <span className="font-bold uppercase tracking-widest text-[9px] text-slate-400 text-center">Manual<br/>Entry</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Enhanced History Component */}
-          <div className="mt-auto">
-            <ScanHistory history={history} onSelect={(item) => handleSuccess(item.vin)} />
+            <button
+              onClick={() => { triggerHaptic(); setShowManualEntry(true); }}
+              className="w-full bg-slate-800 py-4 rounded-3xl flex flex-col items-center justify-center gap-2 border border-slate-700 active:scale-95 transition-all"
+            >
+              <PencilIcon className="w-6 h-6 text-slate-400" />
+              <span className="font-bold uppercase tracking-widest text-[9px] text-slate-400 text-center">Manual<br/>Entry</span>
+            </button>
           </div>
         </div>
-      ) : (
-        /* Native Scanner Viewport */
-        <div className="fixed inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <div className="w-80 h-48 border-2 border-blue-500/80 rounded-[2.5rem] shadow-[0_0_0_9999px_rgba(2,6,23,0.85)] relative overflow-hidden">
-             <div className="absolute top-0 left-0 right-0 h-1 bg-blue-400 shadow-[0_0_15px_rgba(59,130,246,1)] animate-[scan-move_2s_infinite]"></div>
-             <div className="absolute inset-0 border-[3px] border-blue-400/30 rounded-[2.4rem]"></div>
-          </div>
-          <p className="mt-8 text-white/60 text-[10px] font-black uppercase tracking-[0.4em] animate-pulse">Align Door Jamb Barcode</p>
+
+        {/* Enhanced History Component */}
+        <div className="mt-auto">
+          <ScanHistory history={history} onSelect={(item) => handleSuccess(item.vin)} />
         </div>
-      )}
+      </div>
 
       {/* Manual Entry Modal */}
       {showManualEntry && (
@@ -310,7 +264,10 @@ const VinScannerPage = () => {
           <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-[3rem] p-8 shadow-2xl">
             <div className="flex justify-between items-center mb-6">
               <h3 className="font-black uppercase italic text-xl">Type <span className="text-blue-500">VIN</span></h3>
-              <button onClick={() => setShowManualEntry(false)} className="text-slate-500 p-2 hover:bg-slate-800 rounded-full">
+              <button 
+                onClick={() => { triggerHaptic(); setShowManualEntry(false); }} 
+                className="text-slate-500 p-2 hover:bg-slate-800 rounded-full transition-colors"
+              >
                 <XMarkIcon className="w-6 h-6" />
               </button>
             </div>
@@ -321,11 +278,11 @@ const VinScannerPage = () => {
                 placeholder="17-Digit VIN"
                 value={manualVin} 
                 onChange={(e) => setManualVin(e.target.value.toUpperCase())}
-                className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-center font-mono text-xl tracking-widest text-blue-400 focus:border-blue-500 outline-none placeholder:text-slate-700"
+                className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-center font-mono text-xl tracking-widest text-blue-400 focus:border-blue-500 outline-none placeholder:text-slate-700 transition-colors"
               />
               <button 
                 type="submit" disabled={manualVin.length !== 17}
-                className="w-full bg-blue-600 disabled:bg-slate-800 disabled:text-slate-600 py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-colors"
+                className="w-full bg-blue-600 disabled:bg-slate-800 disabled:text-slate-600 py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-colors active:scale-95"
               >
                 Decode Unit
               </button>

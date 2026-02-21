@@ -2,26 +2,22 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axiosClient from "../api/axiosClient";
 import { useDarkMode } from "../hooks/useDarkMode";
-import { Haptics, ImpactStyle } from "@capacitor/haptics";
+import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
+
+// Components
 import VehicleMediaUploader from "../components/VehicleMediaUploader";
+import PhotoCarousel from "../components/PhotoCarousel";
+import PriceEditModal from "../components/PriceEditModal"; // ✅ Added for quick updates
 
 import { 
   ArrowLeftIcon, 
-  RectangleStackIcon,
   TagIcon,
   HashtagIcon,
   WrenchScrewdriverIcon,
   QrCodeIcon,
-  CheckBadgeIcon
+  CheckBadgeIcon,
+  PencilSquareIcon
 } from "@heroicons/react/24/outline";
-
-// ✅ Helper to format relative database paths into absolute server URLs
-const getMediaUrl = (path) => {
-  if (!path) return '';
-  if (path.startsWith('http')) return path; 
-  const baseUrl = (process.env.REACT_APP_API_BASE_URL || "http://192.168.0.73:5000/api").replace('/api', '');
-  return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
-};
 
 const InventoryDetailPage = () => {
   const { id } = useParams();
@@ -30,6 +26,7 @@ const InventoryDetailPage = () => {
   
   const [vehicle, setVehicle] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchVehicleDetails = async () => {
@@ -39,7 +36,6 @@ const InventoryDetailPage = () => {
         setVehicle(res.data);
       } catch (error) {
         console.error("Failed to fetch vehicle details:", error);
-        alert("Vehicle not found or connection lost.");
         navigate("/inventory");
       } finally {
         setLoading(false);
@@ -49,20 +45,29 @@ const InventoryDetailPage = () => {
     fetchVehicleDetails();
   }, [id, navigate]);
 
-  const triggerHaptic = async () => {
-    try { await Haptics.impact({ style: ImpactStyle.Light }); } catch (e) {}
+  const triggerHaptic = async (style = ImpactStyle.Light) => {
+    try { await Haptics.impact({ style }); } catch (e) {}
   };
 
   const handleUploadSuccess = (updatedVehicle) => {
-    // ⚡ Instantly update the UI with the new photos without reloading the page
     setVehicle(updatedVehicle);
+  };
+
+  const handlePriceUpdate = async (unitId, newPrice) => {
+    try {
+      const { data } = await axiosClient.patch(`/inventory/${unitId}`, { price: Number(newPrice) });
+      setVehicle(prev => ({ ...prev, price: data.price }));
+      await Haptics.notification({ type: NotificationType.Success });
+    } catch (err) {
+      await Haptics.notification({ type: NotificationType.Error });
+    }
   };
 
   if (loading) {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center ${isDark ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-900'}`}>
         <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-[10px] font-black uppercase tracking-[0.4em] animate-pulse">Decrypting Unit...</p>
+        <p className="text-[10px] font-black uppercase tracking-[0.4em] animate-pulse">Syncing Engine...</p>
       </div>
     );
   }
@@ -72,63 +77,58 @@ const InventoryDetailPage = () => {
   return (
     <div className={`min-h-screen pb-32 transition-colors duration-300 ${isDark ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-900"}`}>
       
-      {/* 📸 Hero Image / Header Section */}
-      <div className="relative h-72 w-full bg-slate-900 overflow-hidden">
-        {vehicle.photos && vehicle.photos.length > 0 ? (
-          <img 
-            src={getMediaUrl(vehicle.photos[0])} 
-            alt={vehicle.model} 
-            className="w-full h-full object-cover opacity-90"
-          />
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center opacity-20">
-            <RectangleStackIcon className="w-24 h-24 mb-2" />
-            <span className="font-black uppercase tracking-widest text-xs">Awaiting Media</span>
-          </div>
-        )}
+      {/* 📸 Navigation Overlay */}
+      <div className="absolute top-0 left-0 w-full z-50 p-6 pt-safe flex justify-between items-center pointer-events-none">
+        <button 
+          onClick={() => { triggerHaptic(); navigate(-1); }}
+          className="p-3 bg-slate-950/40 backdrop-blur-md rounded-2xl border border-white/10 text-white active:scale-90 transition-all shadow-lg pointer-events-auto"
+        >
+          <ArrowLeftIcon className="w-5 h-5 stroke-[2px]" />
+        </button>
         
-        {/* Top Gradient Overlay for Nav */}
-        <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-slate-950/80 to-transparent" />
-        
-        {/* Navigation Overlay */}
-        <div className="absolute top-0 left-0 w-full z-10 p-6 pt-safe flex justify-between items-center">
-          <button 
-            onClick={() => { triggerHaptic(); navigate(-1); }}
-            className="p-3 bg-slate-950/50 backdrop-blur-md rounded-2xl border border-white/10 text-white active:scale-90 transition-all shadow-lg"
-          >
-            <ArrowLeftIcon className="w-5 h-5 stroke-[2px]" />
-          </button>
-          
-          <div className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border backdrop-blur-xl ${
-            vehicle.status === 'available' ? 'bg-emerald-500/80 border-emerald-400 text-white' : 'bg-slate-900/80 border-slate-700 text-slate-400'
-          }`}>
-            {vehicle.status || 'UNKNOWN'}
-          </div>
+        <div className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border backdrop-blur-xl pointer-events-auto ${
+          vehicle.status === 'available' ? 'bg-emerald-500/80 border-emerald-400 text-white' : 'bg-slate-900/80 border-slate-700 text-slate-400'
+        }`}>
+          {vehicle.status || 'UNKNOWN'}
         </div>
       </div>
 
-      {/* 📝 Core Details Wrapper */}
+      {/* 🖼️ Photo Carousel */}
+      <div className="w-full">
+        <PhotoCarousel photos={vehicle.photos} isDark={isDark} />
+      </div>
+
+      {/* 📝 Details Content */}
       <div className="px-6 -mt-8 relative z-20">
         
-        {/* Title Card */}
-        <div className={`p-6 rounded-[2.5rem] border shadow-xl mb-6 backdrop-blur-xl ${isDark ? "bg-slate-900/90 border-slate-800" : "bg-white/90 border-slate-200"}`}>
-          <div className="flex justify-between items-start mb-4">
+        {/* ✅ Interactive Title & Price Card */}
+        <div 
+          onClick={() => { triggerHaptic(); setIsPriceModalOpen(true); }}
+          className={`p-6 rounded-[2.5rem] border shadow-2xl mb-6 backdrop-blur-xl transition-all active:scale-[0.98] cursor-pointer ${
+            isDark ? "bg-slate-900/90 border-slate-800 text-white" : "bg-white/90 border-slate-200 text-slate-900"
+          }`}
+        >
+          <div className="flex justify-between items-start">
             <div>
               <h1 className="text-3xl font-black italic tracking-tighter uppercase leading-none mb-1">
                 {vehicle.year} {vehicle.make}
               </h1>
               <p className="text-[12px] font-bold text-blue-500 uppercase tracking-widest">{vehicle.model} {vehicle.trim}</p>
             </div>
-            {vehicle.price > 0 && (
-              <div className="text-right">
-                <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">Listed Price</p>
-                <p className="text-2xl font-black italic text-emerald-500 tracking-tighter">${vehicle.price.toLocaleString()}</p>
+            
+            <div className="text-right">
+              <div className="flex items-center justify-end gap-1 mb-1">
+                <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest">Listing Price</p>
+                <PencilSquareIcon className="w-3 h-3 text-blue-500" />
               </div>
-            )}
+              <p className={`text-2xl font-black italic tracking-tighter ${vehicle.price > 0 ? 'text-emerald-500' : 'text-amber-500 animate-pulse'}`}>
+                {vehicle.price > 0 ? `$${vehicle.price.toLocaleString()}` : "SET PRICE"}
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* 📷 Integrated Native Camera Uploader */}
+        {/* 📷 Native Media Uploader */}
         <div className="mb-6">
           <VehicleMediaUploader 
             vehicleId={vehicle._id} 
@@ -159,8 +159,16 @@ const InventoryDetailPage = () => {
             </div>
           ))}
         </div>
-
       </div>
+
+      {/* ✅ Quick Price Edit Modal */}
+      <PriceEditModal 
+        unit={vehicle} 
+        isOpen={isPriceModalOpen} 
+        isDark={isDark}
+        onClose={() => setIsPriceModalOpen(false)} 
+        onSave={handlePriceUpdate} 
+      />
     </div>
   );
 };

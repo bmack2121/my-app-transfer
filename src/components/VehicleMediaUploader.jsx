@@ -10,8 +10,10 @@ const VehicleMediaUploader = ({ vehicleId, stockNumber, onUploadSuccess }) => {
 
   // 📸 1. Trigger the Native Camera
   const handleTakePhoto = async () => {
+    if (isUploading) return; // Prevent camera trigger during active upload
+
     try {
-      await Haptics.impact({ style: ImpactStyle.Light });
+      try { await Haptics.impact({ style: ImpactStyle.Light }); } catch (e) {}
 
       const image = await Camera.getPhoto({
         quality: 80, // 80% compression saves massive amounts of data without losing visible quality
@@ -21,7 +23,7 @@ const VehicleMediaUploader = ({ vehicleId, stockNumber, onUploadSuccess }) => {
       });
 
       // 🔄 2. Convert the Native URI to a File Blob
-      // This is the secret sauce: fetch the local device URI and convert it to a binary Blob
+      // Fetch the local device URI and convert it to a binary Blob
       const response = await fetch(image.webPath);
       const blob = await response.blob();
       
@@ -34,23 +36,26 @@ const VehicleMediaUploader = ({ vehicleId, stockNumber, onUploadSuccess }) => {
       setPhotos((prev) => [...prev, { preview: image.webPath, file }]);
 
     } catch (error) {
-      console.warn("Camera cancelled or failed:", error);
+      if (!error.message?.includes('User cancelled')) {
+        console.warn("Camera failed:", error);
+      }
     }
   };
 
   // 🗑️ Remove photo before uploading
   const removePhoto = (indexToRemove) => {
-    Haptics.impact({ style: ImpactStyle.Light });
+    if (isUploading) return; // Lock deletion during upload
+    try { Haptics.impact({ style: ImpactStyle.Light }); } catch (e) {}
     setPhotos((prev) => prev.filter((_, index) => index !== indexToRemove));
   };
 
   // 🚀 3. Send to Node.js / Multer
   const handleUpload = async () => {
-    if (photos.length === 0) return;
+    if (photos.length === 0 || isUploading) return;
 
     try {
       setIsUploading(true);
-      await Haptics.impact({ style: ImpactStyle.Medium });
+      try { await Haptics.impact({ style: ImpactStyle.Medium }); } catch (e) {}
 
       // Create standard FormData
       const formData = new FormData();
@@ -68,14 +73,14 @@ const VehicleMediaUploader = ({ vehicleId, stockNumber, onUploadSuccess }) => {
       // when it sees FormData, allowing the browser to set the correct boundary tags!
       const res = await axiosClient.put(`/inventory/${vehicleId}`, formData);
 
-      await Haptics.notification({ type: NotificationType.Success });
+      try { await Haptics.notification({ type: NotificationType.Success }); } catch (e) {}
       setPhotos([]); // Clear out the staging area
       
       if (onUploadSuccess) onUploadSuccess(res.data);
 
     } catch (error) {
       console.error("Upload failed:", error);
-      await Haptics.notification({ type: NotificationType.Error });
+      try { await Haptics.notification({ type: NotificationType.Error }); } catch (e) {}
       alert("Failed to upload media. Check connection and try again.");
     } finally {
       setIsUploading(false);
@@ -92,7 +97,8 @@ const VehicleMediaUploader = ({ vehicleId, stockNumber, onUploadSuccess }) => {
         
         <button
           onClick={handleTakePhoto}
-          className="bg-slate-800 hover:bg-slate-700 text-blue-400 p-4 rounded-2xl transition-all active:scale-90 shadow-lg border border-slate-700"
+          disabled={isUploading}
+          className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-blue-400 p-4 rounded-2xl transition-all active:scale-90 shadow-lg border border-slate-700"
         >
           <CameraIcon className="w-6 h-6" />
         </button>
@@ -102,11 +108,12 @@ const VehicleMediaUploader = ({ vehicleId, stockNumber, onUploadSuccess }) => {
       {photos.length > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-6">
           {photos.map((photo, index) => (
-            <div key={index} className="relative aspect-square rounded-xl overflow-hidden border border-slate-700 group">
+            <div key={photo.preview} className="relative aspect-square rounded-xl overflow-hidden border border-slate-700 group">
               <img src={photo.preview} alt="Staged vehicle" className="w-full h-full object-cover" />
               <button 
                 onClick={() => removePhoto(index)}
-                className="absolute top-1 right-1 bg-red-500/80 backdrop-blur text-white p-1.5 rounded-lg active:scale-90"
+                disabled={isUploading}
+                className="absolute top-1 right-1 bg-red-500/80 backdrop-blur disabled:opacity-50 text-white p-1.5 rounded-lg active:scale-90 transition-all"
               >
                 <TrashIcon className="w-4 h-4" />
               </button>

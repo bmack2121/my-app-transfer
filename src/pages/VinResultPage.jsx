@@ -65,16 +65,16 @@ const VinResultPage = () => {
     try {
       const payload = {
         vin: vin.toUpperCase().trim(),
-        year: vehicleInfo.year ?? 0,
-        make: vehicleInfo.make ?? "Unknown",
-        model: vehicleInfo.model ?? "Unknown",
-        trim: vehicleInfo.trim ?? "Base",
-        engine: vehicleInfo.engine ?? "N/A",
-        driveType: vehicleInfo.driveType ?? "N/A",
-        fuelType: vehicleInfo.fuelType ?? "Gasoline",
+        year: vehicleInfo?.year ?? 0,
+        make: vehicleInfo?.make ?? "Unknown",
+        model: vehicleInfo?.model ?? "Unknown",
+        trim: vehicleInfo?.trim ?? "Base",
+        engine: vehicleInfo?.engine ?? "N/A",
+        driveType: vehicleInfo?.driveType ?? "N/A",
+        fuelType: vehicleInfo?.fuelType ?? "Gasoline",
         exteriorColor: selectedColor,
         status: "available", 
-        price: marketData?.mean_price || 0, 
+        price: marketData?.mean_price ? Number(marketData.mean_price) : 0, 
         stockNumber: `VP-${Date.now().toString().slice(-6)}`
       };
 
@@ -83,7 +83,7 @@ const VinResultPage = () => {
       if (res.status === 201 || res.status === 200) {
         try { await Haptics.notification({ type: NotificationType.Success }); } catch (e) {}
         
-        // ✅ FIX: Navigate directly to the new vehicle's detail page 
+        // Navigate directly to the new vehicle's detail page 
         // so the user can immediately use the VehicleMediaUploader.
         navigate(`/inventory/${res.data._id || res.data.vin}`);
       }
@@ -145,8 +145,7 @@ const VinResultPage = () => {
             <div>
               <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest mb-1">Predictive Valuation</p>
               <p className="text-2xl font-black italic tracking-tighter">
-                {/* ✅ FIX: Safety check to prevent NaN if MarketCheck returns 0 or null */}
-                {marketData.mean_price ? `$${Math.round(marketData.mean_price).toLocaleString()}` : "N/A"}
+                {marketData.mean_price ? `$${Math.round(Number(marketData.mean_price)).toLocaleString()}` : "N/A"}
               </p>
             </div>
           </div>
@@ -164,8 +163,8 @@ const VinResultPage = () => {
           { label: 'Fuel Context', val: vehicleInfo?.fuelType || "Gasoline" },
           { label: 'Engine Config', val: vehicleInfo?.engine || "N/A" },
           { label: 'Body Style', val: vehicleInfo?.bodyClass || "Sedan" }
-        ].map((stat, i) => (
-          <div key={i} className="p-5 bg-slate-900/50 border border-slate-800 rounded-3xl">
+        ].map((stat) => (
+          <div key={stat.label} className="p-5 bg-slate-900/50 border border-slate-800 rounded-3xl">
             <p className="text-[8px] text-slate-500 font-black uppercase tracking-widest mb-1">{stat.label}</p>
             <p className="text-[10px] font-black uppercase tracking-tight text-slate-200">{stat.val}</p>
           </div>

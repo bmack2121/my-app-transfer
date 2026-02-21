@@ -2,10 +2,8 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 import { App as CapApp } from '@capacitor/app';
 
-// Create the Context
 const SocketContext = createContext();
 
-// Custom hook for easy access in your components
 export const useSocket = () => useContext(SocketContext);
 
 export const SocketProvider = ({ children }) => {
@@ -13,60 +11,80 @@ export const SocketProvider = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    // 1. Initialize the Socket
-    // Uses your environment variable, falling back to your local test IP
-    const SERVER_URL = process.env.REACT_APP_API_BASE_URL || "http://192.168.0.73:5000";
+    // ✅ FIX: Use dynamic host detection to prevent IP mismatch
+    const host = window.location.hostname;
+    const SERVER_URL = process.env.REACT_APP_API_BASE_URL || `http://${host}:5000`;
     
+    console.log(`📡 Attempting Socket connection to: ${SERVER_URL}`);
+
     const newSocket = io(SERVER_URL, {
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      // Polling fallback is crucial for mobile networks that block raw WebSockets
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000,
+      // ✅ FIX: Force websocket first to avoid the 'interrupted' upgrade error in Firefox
       transports: ['websocket', 'polling'], 
+      // Ensure credentials match your server.js CORS setup
+      withCredentials: true,
+      timeout: 20000,
     });
 
-    // 2. Standard Connection Listeners
     newSocket.on('connect', () => {
-      console.log('🟢 VinPro Socket Connected:', newSocket.id);
+      console.log('🟢 VinPro Pulse Online:', newSocket.id);
       setIsConnected(true);
     });
 
+    newSocket.on('connect_error', (err) => {
+      console.error('🔴 Socket Connection Error:', err.message);
+      // If websocket fails, it will automatically try polling because of our transports array
+    });
+
     newSocket.on('disconnect', (reason) => {
-      console.warn('🔴 VinPro Socket Disconnected. Reason:', reason);
+      console.warn('🟡 Pulse Offline. Reason:', reason);
       setIsConnected(false);
+      
+      // If the server kicked us (io server disconnect), we manually reconnect
+      if (reason === "io server disconnect") {
+        newSocket.connect();
+      }
     });
 
     setSocket(newSocket);
 
-    // 3. The Magic: Capacitor Lifecycle Hooks
-    // This tells the socket to shut down cleanly when the app goes to the background,
-    // and immediately reconnect when the salesman opens the app again.
-    const appStateListener = CapApp.addListener('appStateChange', ({ isActive }) => {
-      if (isActive) {
-        console.log("App Foregrounded: Reconnecting Socket...");
-        if (newSocket && !newSocket.connected) {
-          newSocket.connect();
-        }
-      } else {
-        console.log("App Backgrounded: Suspending Socket...");
-        if (newSocket && newSocket.connected) {
-          // Disconnect gracefully so the Node server doesn't hold a ghost connection
+    // ✅ MOBILE OPTIMIZATION: Lifecycle management
+    const setupLifecycle = async () => {
+      const appStateListener = await CapApp.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) {
+          if (!newSocket.connected) {
+            console.log("🔄 App Active: Re-syncing Pulse...");
+            newSocket.connect();
+          }
+        } else {
+          console.log("💤 App Backgrounded: Sleeping Pulse...");
           newSocket.disconnect();
         }
-      }
-    });
+      });
+      return appStateListener;
+    };
 
-    // 4. Cleanup on Unmount
+    const listenerPromise = setupLifecycle();
+
     return () => {
-      appStateListener.then(listener => listener.remove());
+      listenerPromise.then(l => l.remove());
+      newSocket.removeAllListeners();
       newSocket.disconnect();
     };
   }, []);
 
   return (
     <SocketContext.Provider value={{ socket, isConnected }}>
+      {/* ✅ Bonus: Connection Status Dot */}
+      <div className="fixed top-2 right-2 z-[9999] flex items-center gap-2 pointer-events-none">
+        <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : 'bg-rose-500 animate-pulse'}`} />
+        <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">
+          {isConnected ? 'Live' : 'Offline'}
+        </span>
+      </div>
       {children}
     </SocketContext.Provider>
   );

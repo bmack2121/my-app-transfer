@@ -2,14 +2,18 @@ import React from 'react';
 import { Share } from '@capacitor/share';
 
 const CustomerCard = ({ customer }) => {
-  // ✅ Handle sharing the walkthrough video via SMS/Apps
+  // ✅ Handle sharing with safety check for name
   const handleShareVideo = async (e) => {
-    e.stopPropagation(); // Don't trigger the card click
+    e.stopPropagation(); 
     if (!customer.walkthroughVideoUrl) return;
 
+    // Fallback name if missing to prevent split() crash
+    const displayName = customer.name || "Valued Customer";
+    const firstName = displayName.split(' ')[0];
+
     await Share.share({
-      title: `Video for ${customer.name}`,
-      text: `Hey ${customer.name.split(' ')[0]}, check out this walkthrough video of the vehicle you liked!`,
+      title: `Video for ${displayName}`,
+      text: `Hey ${firstName}, check out this walkthrough video of the vehicle you liked!`,
       url: customer.walkthroughVideoUrl,
       dialogTitle: 'Share Walkthrough',
     });
@@ -17,9 +21,21 @@ const CustomerCard = ({ customer }) => {
 
   // Engagement Color Logic
   const getEngagementColor = (score) => {
-    if (score >= 80) return 'bg-emerald-500';
-    if (score >= 50) return 'bg-amber-500';
+    const s = score || 0;
+    if (s >= 80) return 'bg-emerald-500';
+    if (s >= 50) return 'bg-amber-500';
     return 'bg-slate-400';
+  };
+
+  // ✅ Initials Logic with safety check
+  const getInitials = (name) => {
+    if (!name) return '??';
+    return name
+      .split(' ')
+      .filter(n => n.length > 0)
+      .map(n => n[0].toUpperCase())
+      .join('')
+      .slice(0, 2);
   };
 
   return (
@@ -48,7 +64,7 @@ const CustomerCard = ({ customer }) => {
         {/* Profile Avatar with Engagement Ring */}
         <div className="relative shrink-0">
           <div className="w-12 h-12 rounded-full bg-slate-900 flex items-center justify-center text-white font-bold">
-            {customer.name ? customer.name.split(' ').map(n => n[0]).join('') : '??'}
+            {getInitials(customer.name)}
           </div>
           {/* Engagement Status Dot */}
           <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${getEngagementColor(customer.engagement)}`} />
@@ -57,7 +73,7 @@ const CustomerCard = ({ customer }) => {
         <div className="flex-1 min-w-0">
           <div className="flex justify-between items-start pr-12">
             <h4 className="font-bold text-slate-900 text-lg leading-tight mb-1 truncate">
-              {customer.name}
+              {customer.name || "Unnamed Lead"}
             </h4>
           </div>
           
@@ -75,7 +91,7 @@ const CustomerCard = ({ customer }) => {
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
                 customer.status === 'Hot Lead' ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500'
               }`}>
-                {customer.status}
+                {customer.status || 'New'}
               </span>
               {customer.walkthroughVideoUrl && (
                 <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase tracking-wider">
@@ -85,8 +101,8 @@ const CustomerCard = ({ customer }) => {
             </div>
             
             {/* Lead Score Indicator */}
-            <span className="text-[10px] font-black text-slate-300">
-              SCORE: {customer.engagement || 0}
+            <span className="text-[10px] font-black text-slate-300 uppercase">
+              Score: {customer.engagement || 0}
             </span>
           </div>
         </div>
