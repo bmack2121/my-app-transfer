@@ -38,7 +38,6 @@ import LeadIntakePage from "./pages/LeadIntakePage";
 
 /* -------------------------------------------
  * ✅ FIX: Move static arrays OUTSIDE the component 
- * so it isn't recreated on every single render.
  * ----------------------------------------- */
 const noNavbarPaths = [
   "/login", 
@@ -52,11 +51,11 @@ const noNavbarPaths = [
 
 /**
  * Layout: Handles "Edge-to-Edge" UI and Mobile Safe Areas.
- * Integrates Global Logout behavior for shared devices.
  */
 const Layout = ({ children }) => {
   const location = useLocation();
   
+  // Checks if current path starts with any of the restricted paths
   const isFullScreen = noNavbarPaths.some((path) => location.pathname.startsWith(path));
 
   return (
@@ -66,7 +65,7 @@ const Layout = ({ children }) => {
       <main 
         className="flex-grow flex flex-col"
         style={{
-          // Prevents content from being hidden behind the Notch or Home Bar
+          // env(safe-area-inset-...) handles the iPhone Notch and Home Bar
           paddingTop: isFullScreen ? "0" : "calc(4.5rem + env(safe-area-inset-top, 0px))",
           paddingBottom: isFullScreen ? "0" : "env(safe-area-inset-bottom, 20px)",
           paddingLeft: "env(safe-area-inset-left, 0px)",
@@ -82,8 +81,9 @@ const Layout = ({ children }) => {
 const App = () => {
   return (
     <GlobalErrorBoundary>
-      {/* ✅ FIX: Router MUST wrap Providers! 
-          This allows AuthProvider and SocketProvider to use `useNavigate` and `useLocation` */}
+      {/* V7 Future Flags handle React Router's upcoming breaking changes 
+         to keep the console logs clean.
+      */}
       <Router 
         future={{ 
           v7_startTransition: true, 
@@ -91,6 +91,9 @@ const App = () => {
         }}
       >
         <AuthProvider>
+          {/* ✅ NOTE: If you are seeing "Invalid Namespace", 
+             check the initialization URL inside SocketProvider!
+          */}
           <SocketProvider>
             <Layout>
               <Routes>
