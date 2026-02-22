@@ -36,23 +36,26 @@ import VinResultPage from "./pages/VinResultPage";
 import LeaseCalculator from "./pages/LeaseCalculator";
 import LeadIntakePage from "./pages/LeadIntakePage";
 
+/* -------------------------------------------
+ * ✅ FIX: Move static arrays OUTSIDE the component 
+ * so it isn't recreated on every single render.
+ * ----------------------------------------- */
+const noNavbarPaths = [
+  "/login", 
+  "/register", 
+  "/forgot-password", 
+  "/reset-password", 
+  "/vin-scanner", 
+  "/vin-result",
+  "/lead-intake"
+];
+
 /**
  * Layout: Handles "Edge-to-Edge" UI and Mobile Safe Areas.
  * Integrates Global Logout behavior for shared devices.
  */
 const Layout = ({ children }) => {
   const location = useLocation();
-  
-  // Routes that should NOT show the Navbar
-  const noNavbarPaths = [
-    "/login", 
-    "/register", 
-    "/forgot-password", 
-    "/reset-password", 
-    "/vin-scanner", 
-    "/vin-result",
-    "/lead-intake"
-  ];
   
   const isFullScreen = noNavbarPaths.some((path) => location.pathname.startsWith(path));
 
@@ -78,16 +81,17 @@ const Layout = ({ children }) => {
 
 const App = () => {
   return (
-    /* ✅ Step 1: Wrap everything in the Error Boundary */
     <GlobalErrorBoundary>
-      <AuthProvider>
-        <SocketProvider>
-          <Router 
-            future={{ 
-              v7_startTransition: true, 
-              v7_relativeSplatPath: true 
-            }}
-          >
+      {/* ✅ FIX: Router MUST wrap Providers! 
+          This allows AuthProvider and SocketProvider to use `useNavigate` and `useLocation` */}
+      <Router 
+        future={{ 
+          v7_startTransition: true, 
+          v7_relativeSplatPath: true 
+        }}
+      >
+        <AuthProvider>
+          <SocketProvider>
             <Layout>
               <Routes>
                 {/* Fallback to Dashboard */}
@@ -128,9 +132,9 @@ const App = () => {
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </Layout>
-          </Router>
-        </SocketProvider>
-      </AuthProvider>
+          </SocketProvider>
+        </AuthProvider>
+      </Router>
     </GlobalErrorBoundary>
   );
 };

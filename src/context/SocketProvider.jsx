@@ -11,9 +11,14 @@ export const SocketProvider = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    // ✅ FIX: Use dynamic host detection to prevent IP mismatch
+    // ✅ FIX: Safer host detection for Capacitor mobile devices.
+    // If on mobile, window.location.hostname is 'localhost'. Ensure your .env defines the local IP!
     const host = window.location.hostname;
-    const SERVER_URL = process.env.REACT_APP_API_BASE_URL || `http://${host}:5000`;
+    const isLocalhost = host === 'localhost' || host === '127.0.0.1';
+    
+    // Fallback to your known local IP if running locally but the env variable is missing
+    const fallbackIP = isLocalhost ? "192.168.0.73" : host; 
+    const SERVER_URL = process.env.REACT_APP_API_BASE_URL || `http://${fallbackIP}:5000`;
     
     console.log(`📡 Attempting Socket connection to: ${SERVER_URL}`);
 
@@ -22,9 +27,8 @@ export const SocketProvider = ({ children }) => {
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 2000,
-      // ✅ FIX: Force websocket first to avoid the 'interrupted' upgrade error in Firefox
-      transports: ['websocket', 'polling'], 
-      // Ensure credentials match your server.js CORS setup
+      // ✅ FIX: Polling FIRST. This establishes the CORS/HTTP handshake, then upgrades to WebSockets.
+      transports: ['polling', 'websocket'], 
       withCredentials: true,
       timeout: 20000,
     });
@@ -36,14 +40,12 @@ export const SocketProvider = ({ children }) => {
 
     newSocket.on('connect_error', (err) => {
       console.error('🔴 Socket Connection Error:', err.message);
-      // If websocket fails, it will automatically try polling because of our transports array
     });
 
     newSocket.on('disconnect', (reason) => {
       console.warn('🟡 Pulse Offline. Reason:', reason);
       setIsConnected(false);
       
-      // If the server kicked us (io server disconnect), we manually reconnect
       if (reason === "io server disconnect") {
         newSocket.connect();
       }
@@ -51,9 +53,11 @@ export const SocketProvider = ({ children }) => {
 
     setSocket(newSocket);
 
-    // ✅ MOBILE OPTIMIZATION: Lifecycle management
+    // Lifecycle management for Capacitor
+    let appStateListener = null;
+
     const setupLifecycle = async () => {
-      const appStateListener = await CapApp.addListener('appStateChange', ({ isActive }) => {
+      appStateListener = await CapApp.addListener('appStateChange', ({ isActive }) => {
         if (isActive) {
           if (!newSocket.connected) {
             console.log("🔄 App Active: Re-syncing Pulse...");
@@ -64,13 +68,15 @@ export const SocketProvider = ({ children }) => {
           newSocket.disconnect();
         }
       });
-      return appStateListener;
     };
 
-    const listenerPromise = setupLifecycle();
+    setupLifecycle();
 
+    // Cleanup on unmount
     return () => {
-      listenerPromise.then(l => l.remove());
+      if (appStateListener) {
+        appStateListener.remove();
+      }
       newSocket.removeAllListeners();
       newSocket.disconnect();
     };
@@ -78,7 +84,7 @@ export const SocketProvider = ({ children }) => {
 
   return (
     <SocketContext.Provider value={{ socket, isConnected }}>
-      {/* ✅ Bonus: Connection Status Dot */}
+      {/* Connection Status Dot */}
       <div className="fixed top-2 right-2 z-[9999] flex items-center gap-2 pointer-events-none">
         <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : 'bg-rose-500 animate-pulse'}`} />
         <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">
