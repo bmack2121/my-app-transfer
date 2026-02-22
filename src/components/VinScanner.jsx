@@ -7,13 +7,24 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 const VinScanner = ({ onDetected }) => {
   const [status, setStatus] = useState("Ready to scan");
   const [loading, setLoading] = useState(false);
-  const [isScanning, setIsScanning] = useState(false); // ✅ NEW: Tracks live feed state
+  const [isScanning, setIsScanning] = useState(false);
 
-  // ✅ Clean up listeners if the component unmounts unexpectedly
   useEffect(() => {
+    // Proactively install the ML Kit module on component mount
+    const initModule = async () => {
+      try {
+        const isModuleAvailable = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
+        if (!isModuleAvailable.available) {
+          await BarcodeScanner.installGoogleBarcodeScannerModule();
+        }
+      } catch (e) {
+        console.warn("ML Kit module check failed", e);
+      }
+    };
+    initModule();
+
     return () => {
-      BarcodeScanner.removeAllListeners();
-      BarcodeScanner.stopScan().catch(() => {});
+      stopAutoScan(); // Ensure clean up on unmount
     };
   }, []);
 
@@ -28,14 +39,10 @@ const VinScanner = ({ onDetected }) => {
   const fetchVehicleDetails = async (vin) => {
     try {
       setStatus("Querying NHTSA...");
-      const response = await fetch(
-        `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${vin}?format=json`
-      );
+      const response = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${vin}?format=json`);
       const json = await response.json();
       const data = json?.Results?.[0];
-
       if (!data) return { vin };
-
       return {
         vin: vin,
         year: data.ModelYear,
@@ -62,50 +69,34 @@ const VinScanner = ({ onDetected }) => {
     if (onDetected) onDetected(vehicleData);
   };
 
-  // ==========================================
-  // ✅ NEW: TRUE AUTOMATIC LIVE SCANNING
-  // ==========================================
   const handleAutoScan = async () => {
     setLoading(true);
-    setStatus("Starting Auto-Scanner...");
+    setStatus("Waking Scanner...");
 
     try {
+      // 1. Check/Request Camera Permissions
       const perm = await BarcodeScanner.checkPermissions();
       if (perm.camera !== 'granted') {
         const req = await BarcodeScanner.requestPermissions();
         if (req.camera !== 'granted') throw new Error("Permission denied");
       }
 
-      const isModuleAvailable = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
-      if (!isModuleAvailable.available) {
-        setStatus("Installing Modules...");
-        await BarcodeScanner.installGoogleBarcodeScannerModule();
-      }
-
-      // 1. Set up the continuous listener FIRST
+      // 2. Setup the Listener
       const listener = await BarcodeScanner.addListener('barcodeScanned', async (result) => {
-        const rawVal = result.barcode?.rawValue || result.barcode?.displayValue || "";
+        const rawVal = result.barcode?.displayValue || result.barcode?.rawValue || "";
         const validVin = cleanAndExtractVIN(rawVal);
         
         if (validVin) {
-          console.log("✅ AUTO-SCAN VIN ACCEPTED:", validVin);
-          
-          // Instantly kill the scanner to prevent duplicate scans
           await listener.remove();
           await stopAutoScan();
-          return await finalizeScan(validVin);
+          await finalizeScan(validVin);
         }
       });
 
-      // 2. Hide HTML background so camera shows through
-      document.body.style.backgroundColor = "transparent";
-      document.body.style.opacity = "0"; // Sometimes needed depending on app structure
-      
-      setTimeout(() => { document.body.style.opacity = "1"; }, 100);
-
-      // 3. Start live feed
+      // 3. Activate transparency and start feed
+      document.body.classList.add('barcode-scanner-active');
       setIsScanning(true);
-      setStatus("Hover over VIN Barcode...");
+      setStatus("Focus on the Barcode");
       setLoading(false);
       
       await BarcodeScanner.startScan({
@@ -113,43 +104,38 @@ const VinScanner = ({ onDetected }) => {
       });
 
     } catch (error) {
-      console.error("Auto-scanning error:", error);
-      setStatus("Auto-Scan Failed");
+      console.error("Auto-scan native error:", error);
+      setStatus("Scanner encountered an error");
       setLoading(false);
-      setIsScanning(false);
+      stopAutoScan();
     }
   };
 
   const stopAutoScan = async () => {
-    await BarcodeScanner.stopScan();
-    await BarcodeScanner.removeAllListeners();
-    document.body.style.backgroundColor = ""; // Restore original background
+    try {
+      await BarcodeScanner.stopScan();
+      await BarcodeScanner.removeAllListeners();
+    } catch (e) {}
+    document.body.classList.remove('barcode-scanner-active');
     setIsScanning(false);
     setStatus("Ready to scan");
   };
 
-  // ==========================================
-  // ORIGINAL MANUAL SNAP (FALLBACK)
-  // ==========================================
   const handleManualScan = async () => {
     setLoading(true);
-    setStatus("Waking Camera...");
-
+    setStatus("Opening Camera...");
     try {
-      const perm = await Camera.checkPermissions();
-      if (perm.camera !== 'granted') await Camera.requestPermissions();
-
-      let image = await Camera.getPhoto({
-        quality: 80,
+      const image = await Camera.getPhoto({
+        quality: 90,
         width: 1600, 
         source: CameraSource.Camera, 
         resultType: CameraResultType.Base64,
       });
 
-      if (!image?.base64String) throw new Error("No image data");
       const base64Data = image.base64String;
+      setStatus("Processing image...");
 
-      setStatus("Searching for Barcode...");
+      // Attempt Barcode Read from Image
       const barcodeResult = await BarcodeScanner.readBarcodesFromImage({
         base64Image: base64Data,
         formats: [BarcodeFormat.Code128, BarcodeFormat.Code39, BarcodeFormat.DataMatrix],
@@ -157,28 +143,26 @@ const VinScanner = ({ onDetected }) => {
 
       if (barcodeResult?.barcodes?.length > 0) {
         for (const b of barcodeResult.barcodes) {
-          const validVin = cleanAndExtractVIN(b.rawValue || b.displayValue || "");
+          const validVin = cleanAndExtractVIN(b.displayValue || b.rawValue);
           if (validVin) return await finalizeScan(validVin);
         }
       }
 
-      setStatus("Analyzing Text (OCR)...");
+      // Fallback to OCR
+      setStatus("Running OCR...");
       const TextRecognition = Object.values(OCRPlugin).find(v => v && typeof v.detectText === 'function');
       if (TextRecognition) {
         const ocrResult = await TextRecognition.detectText({ base64Image: base64Data }).catch(() => null);
-        if (ocrResult?.text) {
-          const sanitizedText = ocrResult.text.toUpperCase().replace(/I/g, '1').replace(/[OQ]/g, '0').replace(/[^A-Z0-9]/g, ''); 
-          const potentialVins = sanitizedText.match(/[A-Z0-9]{17}/g) || [];
-          for (const match of potentialVins) {
-            const validOcrVin = cleanAndExtractVIN(match);
-            if (validOcrVin) return await finalizeScan(validOcrVin);
-          }
+        const matches = ocrResult?.text?.toUpperCase().match(/[A-Z0-9]{10,17}/g) || [];
+        for (const m of matches) {
+          const validOcrVin = cleanAndExtractVIN(m);
+          if (validOcrVin) return await finalizeScan(validOcrVin);
         }
       }
 
-      setStatus("No VIN detected. Try again.");
-      await Haptics.impact({ style: ImpactStyle.Heavy });
+      setStatus("VIN not found. Try again.");
     } catch (error) {
+      console.error("Manual scan error:", error);
       setStatus("Ready to scan");
     } finally {
       setLoading(false);
@@ -186,54 +170,55 @@ const VinScanner = ({ onDetected }) => {
   };
 
   return (
-    <div className={`flex flex-col items-center gap-4 w-full max-w-sm mx-auto p-4 ${isScanning ? 'bg-transparent' : ''}`}>
+    <div className={`flex flex-col items-center gap-4 w-full max-w-sm mx-auto p-4 ${isScanning ? 'scanner-ui-overlay' : ''}`}>
       <div className="w-full flex justify-center mb-2">
         <div className="bg-slate-900 border border-slate-800 text-blue-400 px-6 py-2 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg text-center leading-tight">
           {status}
         </div>
       </div>
       
-      {/* RENDER ACTIVE SCANNER OVERLAY OR MAIN BUTTONS */}
       {isScanning ? (
-        <div className="flex flex-col items-center gap-4 w-full mt-10">
-          <div className="w-64 h-64 border-4 border-blue-500 border-dashed rounded-xl flex items-center justify-center animate-pulse">
-             <span className="text-blue-500 font-bold text-center px-4">Aim at VIN Barcode</span>
+        <div className="flex flex-col items-center justify-between h-[60vh] w-full">
+          {/* Aesthetic Viewfinder Box */}
+          <div className="w-64 h-40 border-2 border-blue-400/30 rounded-lg relative overflow-hidden bg-blue-500/5">
+            <div className="scanner-laser"></div>
+            
+            {/* Viewfinder Corners */}
+            <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-blue-400"></div>
+            <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-blue-400"></div>
+            <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-blue-400"></div>
+            <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-blue-400"></div>
           </div>
+          
           <button
             onClick={stopAutoScan}
-            className="w-full h-14 mt-4 bg-red-600 hover:bg-red-500 rounded-full font-black text-xs uppercase tracking-widest text-white shadow-lg"
+            className="w-full h-14 bg-red-600 rounded-full font-black text-xs uppercase tracking-widest text-white shadow-2xl active:scale-95 transition-transform"
           >
             Cancel Scan
           </button>
         </div>
       ) : (
-        <>
+        <div className="w-full space-y-3">
           <button
             onClick={handleAutoScan}
             disabled={loading}
-            className={`relative w-full h-16 flex flex-col items-center justify-center rounded-[1.5rem] font-black text-xs uppercase tracking-widest text-white shadow-xl transition-all active:scale-95 ${
-              loading ? "bg-slate-800" : "bg-green-600 hover:bg-green-500"
-            }`}
+            className={`w-full h-16 rounded-2xl font-black text-xs uppercase tracking-widest text-white shadow-xl transition-all active:scale-95 ${loading ? "bg-slate-800" : "bg-green-600 hover:bg-green-500"}`}
           >
-            {loading ? "Processing..." : "📡 Auto-Scan (Live)"}
+            {loading ? "Initializing..." : "📡 Live Barcode Scan"}
           </button>
 
           <button
             onClick={handleManualScan}
             disabled={loading}
-            className={`relative w-full h-16 flex flex-col items-center justify-center rounded-[1.5rem] font-black text-xs uppercase tracking-widest text-white shadow-xl transition-all active:scale-95 ${
-              loading ? "bg-slate-800" : "bg-blue-600 hover:bg-blue-500"
-            }`}
+            className={`w-full h-16 rounded-2xl font-black text-xs uppercase tracking-widest text-white shadow-xl transition-all active:scale-95 ${loading ? "bg-slate-800" : "bg-blue-600 hover:bg-blue-500"}`}
           >
             {loading ? "Processing..." : "📸 Manual Snap (OCR)"}
           </button>
-        </>
-      )}
-
-      {!isScanning && (
-        <p className="text-[10px] text-slate-500 text-center font-bold px-4 mt-2">
-          Use Auto-Scan for barcodes. Use Manual Snap if you need to read plain text VINs.
-        </p>
+          
+          <p className="text-[10px] text-slate-500 text-center font-bold px-4 pt-2">
+             Auto-Scan is fastest for barcodes. Use Manual Snap for dashboards or titles.
+          </p>
+        </div>
       )}
     </div>
   );
