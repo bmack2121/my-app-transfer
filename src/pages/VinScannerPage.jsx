@@ -18,7 +18,7 @@ import ScanHistory from "../components/ScanHistory";
  */
 const validateVIN = (vin) => {
   if (!vin) return false;
-  let v = vin.toUpperCase().trim().replace(/I/g, '1').replace(/[OQ]/g, '0'); // Catch Q as well
+  let v = vin.toUpperCase().trim().replace(/I/g, '1').replace(/[OQ]/g, '0');
   if (v.length !== 17) return false;
   
   const map = { 
@@ -47,6 +47,7 @@ const VinScannerPage = () => {
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [manualVin, setManualVin] = useState("");
   const [history, setHistory] = useState([]);
+  const [isScanning, setIsScanning] = useState(false); // Tracks native scan state
   
   const navigate = useNavigate();
 
@@ -101,7 +102,7 @@ const VinScannerPage = () => {
       const { camera } = await BarcodeScanner.checkPermissions();
       if (camera !== 'granted') {
         const req = await BarcodeScanner.requestPermissions();
-        if (req.camera !== 'granted') return alert("Camera permission denied.");
+        if (req.camera !== 'granted') return;
       }
 
       const isModuleAvailable = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
@@ -110,11 +111,18 @@ const VinScannerPage = () => {
         await BarcodeScanner.installGoogleBarcodeScannerModule();
       }
 
-      // ✅ FIX: Native .scan() requires DataMatrix for modern auto door jambs
+      // Add transparency class to body
+      document.body.classList.add('barcode-scanner-active');
+      setIsScanning(true);
+
       const { barcodes } = await BarcodeScanner.scan({
         formats: [BarcodeFormat.Code128, BarcodeFormat.Code39, BarcodeFormat.DataMatrix], 
       });
       
+      // Cleanup transparency
+      document.body.classList.remove('barcode-scanner-active');
+      setIsScanning(false);
+
       if (barcodes && barcodes.length > 0) {
         const rawVin = (barcodes[0].displayValue || barcodes[0].rawValue || "").toUpperCase();
         const vin = rawVin.length > 17 ? rawVin.slice(-17) : rawVin;
@@ -122,15 +130,14 @@ const VinScannerPage = () => {
         if (validateVIN(vin)) {
           handleSuccess(vin);
         } else {
-          alert(`Scanned barcode (${vin}) failed VIN checksum validation.`);
+          alert(`Scanned barcode (${vin}) failed VIN validation.`);
         }
       }
     } catch (err) { 
-      if (err.message?.includes('canceled') || err.message?.includes('cancelled')) {
-        console.log("User cancelled native scan");
-      } else {
+      document.body.classList.remove('barcode-scanner-active');
+      setIsScanning(false);
+      if (!err.message?.includes('canceled') && !err.message?.includes('cancelled')) {
         console.error("Scan failed:", err);
-        alert("Scanner encountered an error. Please try OCR or Manual entry.");
       }
     }
   };
@@ -141,7 +148,7 @@ const VinScannerPage = () => {
       const perm = await Camera.checkPermissions();
       if (perm.camera !== 'granted') {
         const req = await Camera.requestPermissions();
-        if (req.camera !== 'granted') return alert("Camera permission denied.");
+        if (req.camera !== 'granted') return;
       }
 
       let image;
@@ -151,10 +158,7 @@ const VinScannerPage = () => {
           source: CameraSource.Camera,
           resultType: CameraResultType.Base64,
         });
-      } catch (cancelErr) {
-        console.log("OCR capture cancelled by user");
-        return;
-      }
+      } catch (cancelErr) { return; }
 
       if (!image || !image.base64String) return;
 
@@ -177,10 +181,9 @@ const VinScannerPage = () => {
         }
       }
 
-      alert("No valid 17-digit VIN found in that image. Try again or enter manually.");
+      alert("No valid 17-digit VIN found in image.");
       setIsProcessing(false);
     } catch (error) {
-      console.error("OCR Scan aborted:", error);
       setIsProcessing(false);
     }
   };
@@ -191,27 +194,28 @@ const VinScannerPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white transition-all">
+    <div className={`min-h-screen transition-all duration-300 ${isScanning ? 'bg-transparent' : 'bg-slate-950'} text-white`}>
       
-      {/* Global Navigation */}
-      <div className="fixed top-0 left-0 w-full z-[70] p-6 pt-safe flex justify-between items-center pointer-events-none">
+      {/* Global Navigation - Hidden during active scan */}
+      <div className={`fixed top-0 left-0 w-full z-[70] p-6 pt-safe flex justify-between items-center transition-opacity ${isScanning ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         <button 
-          onClick={() => navigate(-1)}
-          className="p-3 bg-white/10 backdrop-blur-md rounded-2xl border border-white/5 text-white pointer-events-auto active:scale-90 shadow-lg"
+          onClick={() => { triggerHaptic(); navigate(-1); }}
+          className="p-3 bg-white/10 backdrop-blur-md rounded-2xl border border-white/5 text-white shadow-lg"
         >
           <ArrowLeftIcon className="w-6 h-6 stroke-[2.5px]" />
         </button>
       </div>
 
-      {/* Full Screen Processing Spinner */}
+      {/* Processing Spinner */}
       {isProcessing && (
-        <div className="fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-auto">
+        <div className="fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-sm flex flex-col items-center justify-center">
            <div className="animate-spin h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full mb-4" />
            <p className="font-black uppercase tracking-widest text-blue-400 text-xs animate-pulse">{status}</p>
         </div>
       )}
 
-      <div className="p-8 pt-32 flex flex-col h-full animate-in fade-in duration-500">
+      {/* Main Content UI */}
+      <div className={`p-8 pt-32 flex flex-col h-full transition-opacity duration-300 ${isScanning ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         <header className="mb-10">
           <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none">
             VIN<span className="text-blue-600">PRO</span>
@@ -252,7 +256,6 @@ const VinScannerPage = () => {
           </div>
         </div>
 
-        {/* Enhanced History Component */}
         <div className="mt-auto">
           <ScanHistory history={history} onSelect={(item) => handleSuccess(item.vin)} />
         </div>
@@ -264,25 +267,19 @@ const VinScannerPage = () => {
           <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-[3rem] p-8 shadow-2xl">
             <div className="flex justify-between items-center mb-6">
               <h3 className="font-black uppercase italic text-xl">Type <span className="text-blue-500">VIN</span></h3>
-              <button 
-                onClick={() => { triggerHaptic(); setShowManualEntry(false); }} 
-                className="text-slate-500 p-2 hover:bg-slate-800 rounded-full transition-colors"
-              >
+              <button onClick={() => setShowManualEntry(false)} className="text-slate-500 p-2">
                 <XMarkIcon className="w-6 h-6" />
               </button>
             </div>
             <form onSubmit={handleManualSubmit} className="space-y-6">
               <input 
-                autoFocus 
-                maxLength={17} 
-                placeholder="17-Digit VIN"
-                value={manualVin} 
-                onChange={(e) => setManualVin(e.target.value.toUpperCase())}
-                className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-center font-mono text-xl tracking-widest text-blue-400 focus:border-blue-500 outline-none placeholder:text-slate-700 transition-colors"
+                autoFocus maxLength={17} placeholder="17-Digit VIN"
+                value={manualVin} onChange={(e) => setManualVin(e.target.value.toUpperCase())}
+                className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-center font-mono text-xl tracking-widest text-blue-400 focus:border-blue-500 outline-none"
               />
               <button 
                 type="submit" disabled={manualVin.length !== 17}
-                className="w-full bg-blue-600 disabled:bg-slate-800 disabled:text-slate-600 py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-colors active:scale-95"
+                className="w-full bg-blue-600 disabled:bg-slate-800 py-4 rounded-2xl font-black uppercase tracking-widest text-xs"
               >
                 Decode Unit
               </button>

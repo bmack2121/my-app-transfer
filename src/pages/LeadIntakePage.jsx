@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DLScanner from '../components/Sales/DLScanner';
 import VinScanner from '../components/VinScanner'; 
@@ -10,6 +10,9 @@ const LeadIntakePage = () => {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
+  
+  // State to track if any scanner is currently active to adjust UI visibility
+  const [scannerActive, setScannerActive] = useState(false);
   
   const [leadData, setLeadData] = useState({
     firstName: '',
@@ -25,11 +28,19 @@ const LeadIntakePage = () => {
     vehicleModel: ''
   });
 
+  // Watch for the 'barcode-scanner-active' class on body to toggle local state
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setScannerActive(document.body.classList.contains('barcode-scanner-active'));
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
   const triggerHaptic = async (style = ImpactStyle.Light) => {
     try { await Haptics.impact({ style }); } catch (e) { /* silent fail for web */ }
   };
 
-  // Triggered when the DLScanner successfully parses a license
   const handleDLData = async (data) => {
     if (!data) return;
     await triggerHaptic(ImpactStyle.Heavy);
@@ -44,7 +55,6 @@ const LeadIntakePage = () => {
     setIsDataLoaded(true);
   };
 
-  // Triggered when VinScanner captures vehicle info
   const handleVinData = async (vehicle) => {
     if (!vehicle) return;
     await triggerHaptic(ImpactStyle.Heavy);
@@ -61,8 +71,6 @@ const LeadIntakePage = () => {
 
   const handleSaveLead = async () => {
     if (isSubmitting) return;
-    
-    // Basic validation
     if (!leadData.firstName || !leadData.lastName) {
       alert("First and Last name are required.");
       return;
@@ -72,7 +80,6 @@ const LeadIntakePage = () => {
       setIsSubmitting(true);
       await triggerHaptic(ImpactStyle.Medium);
 
-      // Structure the payload for your Node.js backend
       const payload = {
         firstName: leadData.firstName,
         lastName: leadData.lastName,
@@ -81,7 +88,6 @@ const LeadIntakePage = () => {
         address: leadData.address,
         dob: leadData.dob,
         notes: leadData.notes,
-        // Map the scanned VIN to a Trade-In object if it exists
         tradeIn: leadData.vin ? {
           vin: leadData.vin,
           year: leadData.vehicleYear,
@@ -91,10 +97,7 @@ const LeadIntakePage = () => {
       };
 
       const res = await axiosClient.post('/customers', payload);
-      
       try { await Haptics.notification({ type: NotificationType.Success }); } catch (e) {}
-      
-      // Navigate directly to the newly created customer's profile
       navigate(`/customers/${res.data._id || res.data.id}`); 
       
     } catch (error) {
@@ -107,8 +110,11 @@ const LeadIntakePage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white pt-safe pb-32">
-      <div className="p-6">
+    // Conditional transparency: If scanner is active, we strip the bg-slate-950
+    <div className={`min-h-screen transition-opacity duration-300 ${scannerActive ? 'bg-transparent' : 'bg-slate-950'} text-white pt-safe pb-32`}>
+      
+      {/* Container for content that should fade when scanning */}
+      <div className={`p-6 transition-opacity duration-300 ${scannerActive ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         
         <header className="flex items-center gap-4 mb-8">
           <button 
@@ -124,7 +130,6 @@ const LeadIntakePage = () => {
         </header>
 
         <div className="space-y-6">
-          {/* Top Action Section: Scanners */}
           <div className="grid grid-cols-2 gap-4">
              <DLScanner onLeadCaptured={handleDLData} />
              <VinScanner onDetected={handleVinData} />
@@ -144,7 +149,6 @@ const LeadIntakePage = () => {
           ) : (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
               
-              {/* Customer Information */}
               <section className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 space-y-4 shadow-xl">
                 <div className="flex items-center gap-2 text-blue-500 mb-4">
                   <User size={18} className="stroke-[2.5px]" />
@@ -166,7 +170,6 @@ const LeadIntakePage = () => {
                   />
                 </div>
                 
-                {/* Contact Fields */}
                 <div className="grid grid-cols-1 gap-4">
                   <div className="relative">
                     <Phone size={16} className="absolute left-4 top-4 text-slate-500" />
@@ -202,7 +205,6 @@ const LeadIntakePage = () => {
                 </div>
               </section>
 
-              {/* Vehicle Information (Auto-filled by VinScanner) */}
               {(leadData.vin || leadData.vehicleMake) && (
                 <section className="bg-blue-600/10 p-6 rounded-[2.5rem] border border-blue-500/20 space-y-4 animate-in zoom-in-95">
                   <div className="flex items-center gap-2 text-blue-400 mb-2">
@@ -220,7 +222,6 @@ const LeadIntakePage = () => {
                 </section>
               )}
 
-              {/* Submit Button */}
               <button 
                 onClick={handleSaveLead}
                 disabled={isSubmitting || !leadData.firstName}
@@ -239,6 +240,11 @@ const LeadIntakePage = () => {
           )}
         </div>
       </div>
+
+      {/* Note: The actual Scanner UI is rendered by the VinScanner 
+        component itself using a Portal or absolute positioning 
+        with the 'scanner-ui-overlay' class. 
+      */}
     </div>
   );
 };
