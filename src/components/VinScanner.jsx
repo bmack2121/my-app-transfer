@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Capacitor } from '@capacitor/core';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
 import * as OCRPlugin from '@pantrist/capacitor-plugin-ml-kit-text-recognition';
@@ -10,15 +11,17 @@ const VinScanner = ({ onDetected }) => {
   const [isScanning, setIsScanning] = useState(false);
 
   useEffect(() => {
-    // Proactively install the ML Kit module on component mount
+    // Proactively install the ML Kit module on component mount (Android Only)
     const initModule = async () => {
-      try {
-        const isModuleAvailable = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
-        if (!isModuleAvailable.available) {
-          await BarcodeScanner.installGoogleBarcodeScannerModule();
+      if (Capacitor.getPlatform() === 'android') {
+        try {
+          const isModuleAvailable = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
+          if (!isModuleAvailable.available) {
+            await BarcodeScanner.installGoogleBarcodeScannerModule();
+          }
+        } catch (e) {
+          console.warn("ML Kit module check failed", e);
         }
-      } catch (e) {
-        console.warn("ML Kit module check failed", e);
       }
     };
     initModule();
@@ -63,13 +66,21 @@ const VinScanner = ({ onDetected }) => {
   };
 
   const finalizeScan = async (vin) => {
-    await Haptics.impact({ style: ImpactStyle.Medium });
+    // Only fire native haptics if on a physical device
+    if (Capacitor.isNativePlatform()) {
+      await Haptics.impact({ style: ImpactStyle.Medium });
+    }
     const vehicleData = await fetchVehicleDetails(vin);
     setStatus(`Verified: ${vehicleData.year || ''} ${vehicleData.make || ''}`);
     if (onDetected) onDetected(vehicleData);
   };
 
   const handleAutoScan = async () => {
+    if (!Capacitor.isNativePlatform()) {
+      setStatus("Scanner unavailable on web.");
+      return;
+    }
+
     setLoading(true);
     setStatus("Waking Scanner...");
 
@@ -112,16 +123,23 @@ const VinScanner = ({ onDetected }) => {
   };
 
   const stopAutoScan = async () => {
-    try {
-      await BarcodeScanner.stopScan();
-      await BarcodeScanner.removeAllListeners();
-    } catch (e) {}
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await BarcodeScanner.stopScan();
+        await BarcodeScanner.removeAllListeners();
+      } catch (e) {}
+    }
     document.body.classList.remove('barcode-scanner-active');
     setIsScanning(false);
     setStatus("Ready to scan");
   };
 
   const handleManualScan = async () => {
+    if (!Capacitor.isNativePlatform()) {
+      setStatus("Manual snap unavailable on web.");
+      return;
+    }
+
     setLoading(true);
     setStatus("Opening Camera...");
     try {

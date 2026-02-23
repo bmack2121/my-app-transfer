@@ -3,7 +3,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { ChevronRightIcon, ClockIcon } from "@heroicons/react/24/outline";
 
 const ScanHistory = ({ history, onSelect }) => {
-  // ✅ Added Array check to prevent .map crashes if localStorage returns corrupted data
+  // Prevent crashes if localStorage returns corrupted or empty data
   if (!history || !Array.isArray(history) || history.length === 0) return null;
 
   const handleItemClick = async (vin) => {
@@ -12,7 +12,9 @@ const ScanHistory = ({ history, onSelect }) => {
     } catch (e) {
       // Non-native fallback
     }
-    if (onSelect) onSelect(vin);
+    
+    // Pass an object with the vin property to match the parent's expectation
+    if (onSelect) onSelect({ vin });
   };
 
   return (
@@ -26,11 +28,13 @@ const ScanHistory = ({ history, onSelect }) => {
 
       <div className="space-y-3">
         {history.map((item, index) => {
-          // ✅ Support both old string history and new object history
+          // Support both old string history and new object history
           const isString = typeof item === 'string';
-          const vin = isString ? item : item.vin;
+          const vin = isString ? item : item?.vin;
           
-          // Handle missing NHTSA data gracefully so it doesn't say "... Unknown"
+          if (!vin) return null; // Skip corrupted entries
+          
+          // Handle missing NHTSA data gracefully
           const hasMake = !isString && item.make && item.make !== "Unknown";
           const displayYear = !isString && item.year !== "..." ? item.year : "";
           const displayLabel = hasMake ? `${displayYear} ${item.make}`.trim() : "Unit Scan";
@@ -41,6 +45,9 @@ const ScanHistory = ({ history, onSelect }) => {
             
           const dateStr = !isString && item.timestamp ? item.timestamp : null;
           const date = dateStr ? new Date(dateStr) : null;
+          
+          // Ensure the date is valid before trying to render it
+          const isValidDate = date instanceof Date && !isNaN(date.getTime());
           
           // Guarantee unique key to prevent React render glitches
           const itemKey = isString ? `${vin}-${index}` : `${vin}-${item.timestamp}-${index}`;
@@ -56,7 +63,6 @@ const ScanHistory = ({ history, onSelect }) => {
                   {displayLabel}
                 </span>
                 
-                {/* Added truncate to prevent long model names from breaking layout */}
                 <span className="text-sm font-black text-slate-200 uppercase italic tracking-tight truncate">
                   {subLabel}
                 </span>
@@ -66,7 +72,7 @@ const ScanHistory = ({ history, onSelect }) => {
                     {vin}
                   </span>
                   
-                  {date && (
+                  {isValidDate && (
                     <>
                       <span className="h-1 w-1 rounded-full bg-slate-800 shrink-0" />
                       <span className="text-[8px] text-slate-600 font-bold uppercase shrink-0">

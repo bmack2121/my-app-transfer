@@ -62,6 +62,9 @@ const VinResultPage = () => {
     setAdding(true);
     await triggerHaptic(ImpactStyle.Medium);
 
+    // Safely parse price fallback
+    const marketPrice = marketData?.mean_price ? Number(marketData.mean_price) : 0;
+
     try {
       const payload = {
         vin: vin.toUpperCase().trim(),
@@ -74,7 +77,7 @@ const VinResultPage = () => {
         fuelType: vehicleInfo?.fuelType ?? "Gasoline",
         exteriorColor: selectedColor,
         status: "available", 
-        price: marketData?.mean_price ? Number(marketData.mean_price) : 0, 
+        price: !isNaN(marketPrice) ? marketPrice : 0, 
         stockNumber: `VP-${Date.now().toString().slice(-6)}`
       };
 
@@ -84,7 +87,6 @@ const VinResultPage = () => {
         try { await Haptics.notification({ type: NotificationType.Success }); } catch (e) {}
         
         // Navigate directly to the new vehicle's detail page 
-        // so the user can immediately use the VehicleMediaUploader.
         navigate(`/inventory/${res.data._id || res.data.vin}`);
       }
     } catch (err) {
@@ -103,6 +105,11 @@ const VinResultPage = () => {
       </div>
     );
   }
+
+  // Calculate safe market price for display
+  const displayPrice = marketData?.mean_price && !isNaN(Number(marketData.mean_price))
+    ? `$${Math.round(Number(marketData.mean_price)).toLocaleString()}`
+    : "N/A";
 
   return (
     <div className="p-6 bg-slate-950 min-h-screen text-white pb-32 overflow-y-auto pt-safe">
@@ -145,7 +152,7 @@ const VinResultPage = () => {
             <div>
               <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest mb-1">Predictive Valuation</p>
               <p className="text-2xl font-black italic tracking-tighter">
-                {marketData.mean_price ? `$${Math.round(Number(marketData.mean_price)).toLocaleString()}` : "N/A"}
+                {displayPrice}
               </p>
             </div>
           </div>

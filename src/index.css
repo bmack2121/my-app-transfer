@@ -26,23 +26,6 @@
     -webkit-text-size-adjust: 100%;
   }
 
-  /* --- FIXED SCANNER TRANSPARENCY --- */
-  /* We make the backgrounds transparent, but NOT the content itself */
-  body.barcode-scanner-active,
-  body.barcode-scanner-active #root,
-  body.barcode-scanner-active .main-content,
-  body.barcode-scanner-active .sidebar {
-    @apply bg-transparent !important;
-    background-image: none !important;
-  }
-
-  /* Ensure the header/nav stays visible during scan if needed, or hide everything else */
-  /* If you want the header to stay, don't hide it here */
-  body.barcode-scanner-active .dashboard-card,
-  body.barcode-scanner-active .glass-panel {
-    @apply opacity-0 pointer-events-none;
-  }
-
   #root {
     @apply h-full flex flex-col;
   }
@@ -60,7 +43,6 @@
     padding-left: calc(1rem + var(--safe-area-left));
     padding-bottom: var(--safe-area-bottom);
     @apply bg-slate-900 border-r border-slate-800 w-64 h-full transition-all;
-    /* Ensure sidebar stays on top of camera but allows transparency */
     z-index: 50; 
   }
 
@@ -90,17 +72,6 @@
   .glass-panel {
     @apply bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-3xl transition-all;
   }
-
-  /* --- Scanner UI Components --- */
-  .scanner-ui-overlay {
-    @apply fixed inset-0 z-[9999] flex flex-col items-center justify-center p-6 bg-transparent;
-    /* Pointer events handled by children so you can still click 'Cancel' */
-  }
-
-  .scanner-laser {
-    @apply absolute top-0 left-0 w-full h-1 bg-blue-500 shadow-[0_0_15px_rgba(37,99,235,1)];
-    animation: scan-line 2s linear infinite;
-  }
 }
 
 @layer utilities {
@@ -111,11 +82,4 @@
   
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-  @keyframes scan-line {
-    0% { top: 0%; opacity: 0; }
-    10% { opacity: 1; }
-    90% { opacity: 1; }
-    100% { top: 100%; opacity: 0; }
-  }
 }
