@@ -3,21 +3,19 @@ import { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.vinpro.app',
   appName: 'VinPro',
-  // ✅ FIX: Ensure this matches your local folder. CRA uses 'build', Vite uses 'dist'
   webDir: 'build', 
 
   server: {
-    // 🔌 LIVE RELOAD: Your physical iPhone connects to your Mac/PC IP
-    url: "http://192.168.0.73:3000", 
-    cleartext: true, 
+    // 🛑 THE CORD IS CUT: We completely removed the Live Reload `url`.
+    // The app will now boot natively from the physical phone memory.
     
-    // ✅ Match your dev server protocol for both platforms
-    androidScheme: 'http',
-    iosScheme: 'http', 
+    // ✅ Use secure HTTPS for production
+    androidScheme: 'https',
+    iosScheme: 'https', 
     
     allowNavigation: [
-      '192.168.0.73', // Base IP
-      '192.168.0.73:*', // All ports on that IP (3000, 5000, etc)
+      // ✅ Allow the app to talk to your live cloud server
+      'autosalespro-backend.onrender.com',
       '*.chase.com',
       '*.wellsfargo.com',
       '*.bankofamerica.com',
@@ -29,20 +27,18 @@ const config: CapacitorConfig = {
     buildOptions: {
       releaseType: 'AAB',
     },
-    // ✅ Crucial for loading vehicle photos/API data from local IP
-    allowMixedContent: true,
+    // Turned off for production security since we are using HTTPS now
+    allowMixedContent: false, 
     captureInput: true,
     backgroundColor: "#020617"
   },
 
   ios: {
-    // ✅ Required for Capacitor 8 / SPM to handle local networking correctly
     contentInset: 'always',
     backgroundColor: "#020617"
   },
 
   plugins: {
-    // ✅ Added BarcodeScanner config to ensure the bridge initializes properly
     BarcodeScanner: {
       installGoogleBarcodeScannerModule: true,
     },

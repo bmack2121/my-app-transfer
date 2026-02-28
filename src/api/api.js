@@ -1,11 +1,13 @@
 import axios from "axios";
 
+// ✅ THE FIX: We prioritize the Environment Variable, but we change the 
+// hardcoded fallback to your LIVE Render URL. 
+const cloudBaseURL = "https://autosalespro-backend.onrender.com/api";
+
 const api = axios.create({
-  // ✅ FIX: Use process.env for Create React App (CRA)
-  // We check for the ENV variable first, then fall back to the hardcoded IP.
-  baseURL: process.env.REACT_APP_API_BASE_URL || "http://192.168.0.73:5000/api",
+  baseURL: process.env.REACT_APP_API_BASE_URL || cloudBaseURL,
   withCredentials: true,
-  timeout: 15000, 
+  timeout: 20000, // Increased to 20s to allow for Render "Cold Starts" on the Free Tier
 });
 
 // 📤 Request Interceptor: Auth & Identity
@@ -21,9 +23,9 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // ✅ Capture Network Failures (Essential for dealership Wi-Fi)
+    // ✅ Capture Network Failures (Essential for 5G/LTE roaming)
     if (!error.response) {
-      console.error("🏁 VinPro Engine: Network Unreachable. Check your .73 IP and Firewall.");
+      console.error("🏁 VinPro Engine: Cloud Unreachable. Check Render Status or Internet.");
     }
 
     // Handle Session Expiry (401)

@@ -18,11 +18,10 @@ const VehicleCard = ({ vehicle, isBulkMode, isSelected, onToggleSelect, isDark =
     navigate(`/inventory/${vehicle._id || vehicle.vin}`);
   };
 
-  // 📸 Media Capture (Updated for Multer Form-Data)
+  // 📸 Media Capture
   const handleCaptureImage = async (e) => {
     e.stopPropagation();
     try {
-      // 1. Get URI instead of Base64 to save memory
       const image = await Camera.getPhoto({
         quality: 80,
         allowEditing: false,
@@ -32,25 +31,20 @@ const VehicleCard = ({ vehicle, isBulkMode, isSelected, onToggleSelect, isDark =
 
       setUploading(true);
 
-      // 2. Convert URI to Blob for Multer
       const response = await fetch(image.webPath);
       const blob = await response.blob();
       const file = new File([blob], `photo-${Date.now()}.${image.format}`, { 
         type: `image/${image.format}` 
       });
 
-      // 3. Package into FormData
       const formData = new FormData();
       formData.append("photos", file);
-      // Fallback stock number if the backend needs it for the filename
       formData.append("stockNumber", vehicle.stockNumber || "VINPRO"); 
 
-      // 4. Send to the updated Express endpoint
+      // Send to Render Cloud
       const res = await axiosClient.put(`/inventory/${vehicle._id}`, formData);
       
-      // Update local preview immediately
       if (res.data.photos && res.data.photos.length > 0) {
-        // Grab the most recently added photo
         setPreviewUrl(res.data.photos[res.data.photos.length - 1]);
       }
       
@@ -69,16 +63,20 @@ const VehicleCard = ({ vehicle, isBulkMode, isSelected, onToggleSelect, isDark =
   const daysOnLot = vehicle.daysOnLot || 0;
   const agingColor = daysOnLot > 60 ? 'text-rose-500' : daysOnLot > 30 ? 'text-orange-500' : 'text-emerald-500';
   
-  // ✅ FIX: Use the new nested marketData structure from the Node.js backend
   const marketPrice = vehicle.marketData?.mean_price || vehicle.marketAverage || 0;
   const isAggressive = (vehicle.marketData?.price_rank === 'Great Deal') || (marketPrice > 0 && vehicle.price < (marketPrice * 0.95));
 
-  // ✅ Helper to format relative database paths into absolute server URLs
+  // ✅ THE FIX: Point to Render Cloud instead of Local IP
   const getFullImageUrl = (path) => {
     if (!path) return null;
     if (path.startsWith('http') || path.startsWith('data:')) return path; 
-    const baseUrl = (process.env.REACT_APP_API_BASE_URL || "http://192.168.0.73:5000/api").replace('/api', '');
-    return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+    
+    const cloudBackend = "https://autosalespro-backend.onrender.com";
+    const baseUrl = (process.env.REACT_APP_API_BASE_URL || `${cloudBackend}/api`).replace('/api', '');
+    
+    // Clean up paths that might have double slashes or start with 'public'
+    const cleanPath = path.replace(/^public\//, "").replace(/^uploads\//, "");
+    return `${baseUrl}/uploads/${cleanPath}`;
   };
 
   return (
@@ -90,13 +88,13 @@ const VehicleCard = ({ vehicle, isBulkMode, isSelected, onToggleSelect, isDark =
         isBulkMode && isSelected ? 'ring-4 ring-blue-600 scale-[0.97]' : 'active:scale-[0.98] cursor-pointer'
       }`}
     >
-      {/* 📸 Media Section */}
       <div className={`relative h-56 overflow-hidden ${isDark ? 'bg-slate-950' : 'bg-slate-100'}`}>
         {previewUrl ? (
           <img 
             src={getFullImageUrl(previewUrl)} 
             alt={`${vehicle.year} ${vehicle.make}`} 
             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+            onError={(e) => { e.target.src = 'https://via.placeholder.com/400x300?text=Image+Not+Found'; }}
           />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 opacity-30">
@@ -105,14 +103,12 @@ const VehicleCard = ({ vehicle, isBulkMode, isSelected, onToggleSelect, isDark =
           </div>
         )}
 
-        {/* 📉 Market Badge */}
         {isAggressive && (
-          <div className="absolute top-4 left-4 bg-emerald-600 text-white text-[9px] font-black px-3 py-1.5 rounded-xl shadow-xl flex items-center gap-1 z-20 animate-in fade-in zoom-in duration-300">
+          <div className="absolute top-4 left-4 bg-emerald-600 text-white text-[9px] font-black px-3 py-1.5 rounded-xl shadow-xl z-20">
             DEAL RANK: AGGRESSIVE
           </div>
         )}
 
-        {/* 📷 Quick Capture Button */}
         {!isBulkMode && (
           <button 
             onClick={handleCaptureImage}
@@ -128,7 +124,6 @@ const VehicleCard = ({ vehicle, isBulkMode, isSelected, onToggleSelect, isDark =
         )}
       </div>
 
-      {/* 📝 Specs Section */}
       <div className="p-6">
         <div className="flex justify-between items-start mb-4">
           <div>
@@ -144,7 +139,6 @@ const VehicleCard = ({ vehicle, isBulkMode, isSelected, onToggleSelect, isDark =
           </span>
         </div>
 
-        {/* 📊 Vital Stats */}
         <div className="grid grid-cols-2 gap-4 pb-4 border-b border-white/5">
           <div className="space-y-1">
             <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Lot Aging</p>
@@ -158,7 +152,6 @@ const VehicleCard = ({ vehicle, isBulkMode, isSelected, onToggleSelect, isDark =
           </div>
         </div>
 
-        {/* 💵 Pricing Area */}
         <div className="mt-5 flex items-center justify-between">
           <div className="flex flex-col">
             <span className={`text-2xl font-black italic tracking-tighter leading-none ${isDark ? 'text-white' : 'text-slate-950'}`}>
@@ -172,7 +165,7 @@ const VehicleCard = ({ vehicle, isBulkMode, isSelected, onToggleSelect, isDark =
           {!isBulkMode && (
             <button 
               onClick={handleGoToDetails}
-              className="bg-blue-600 text-white text-[10px] font-black px-6 py-3.5 rounded-2xl uppercase tracking-[0.2em] shadow-lg shadow-blue-600/20 active:scale-95 transition-all"
+              className="bg-blue-600 text-white text-[10px] font-black px-6 py-3.5 rounded-2xl uppercase tracking-[0.2em] shadow-lg active:scale-95 transition-all"
             >
               Inspect
             </button>

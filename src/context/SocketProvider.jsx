@@ -12,33 +12,34 @@ export const SocketProvider = ({ children }) => {
   const socketRef = useRef(null);
 
   useEffect(() => {
+    // Prevent double-initialization in React Strict Mode
     if (socketRef.current) return;
 
-    const host = window.location.hostname;
-    const isLocalhost = host === 'localhost' || host === '127.0.0.1';
-    const fallbackIP = isLocalhost ? "192.168.0.73" : host; 
+    // ✅ THE CLOUD FIX: Explicitly point to your Render backend
+    const CLOUD_URL = "https://autosalespro-backend.onrender.com";
     
-    // Grab the URL from env or fallback
-    let rawUrl = process.env.REACT_APP_API_BASE_URL || `http://${fallbackIP}:5000`;
+    // Grab URL from env or fallback to Render Cloud
+    let rawUrl = process.env.REACT_APP_API_BASE_URL || CLOUD_URL;
 
     /* -------------------------------------------
-     * ✅ THE "AUTO-FIX" LOGIC
-     * 1. Remove trailing slashes.
-     * 2. Remove /api suffix (Socket.io fails with this).
+     * ✅ THE "AUTO-CLEAN" LOGIC
+     * Socket.io MUST NOT have /api at the end.
      * ----------------------------------------- */
-    const SERVER_URL = rawUrl.replace(/\/+$/, "").replace(/\/api$/, "");
+    const SERVER_URL = rawUrl
+      .replace(/\/+$/, "")      // Remove trailing slashes
+      .replace(/\/api$/, "");   // Remove /api suffix for socket handshake
     
-    console.log(`📡 VinPro Pulse Attempting: ${SERVER_URL}`);
+    console.log(`📡 VinPro Pulse Initializing: ${SERVER_URL}`);
 
     const newSocket = io(SERVER_URL, {
       transports: ['websocket', 'polling'], 
       path: "/socket.io/", 
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 3000,
+      reconnectionAttempts: 20, // Increased for spotty dealership Wi-Fi/5G
+      reconnectionDelay: 5000,
       withCredentials: true,
-      timeout: 20000,
+      timeout: 45000, // Higher timeout for Render "Cold Starts"
       forceNew: true 
     });
 
@@ -50,13 +51,14 @@ export const SocketProvider = ({ children }) => {
     });
 
     newSocket.on('connect_error', (err) => {
-      console.error('🔴 Socket Connection Error:', err.message);
-      // If you still see 'Invalid namespace', double check your backend path config
+      console.error('🔴 Pulse Connection Error:', err.message);
     });
 
     newSocket.on('disconnect', (reason) => {
       console.warn('🟡 Pulse Offline. Reason:', reason);
       setIsConnected(false);
+      
+      // If the server kicked us (Render restart), try to get back in
       if (reason === "io server disconnect") {
         newSocket.connect();
       }
@@ -65,17 +67,20 @@ export const SocketProvider = ({ children }) => {
     setSocket(newSocket);
 
     /* -------------------------------------------
-     * ✅ CAPACITOR LIFECYCLE
+     * ✅ CAPACITOR LIFECYCLE (Mobile Optimization)
      * ----------------------------------------- */
     let appStateListener = null;
 
-    const handleAppStateChange = ({ isActive }) => {
-      if (isActive) {
-        console.log("🔄 App Active: Reconnecting Pulse...");
-        if (!newSocket.connected) newSocket.connect();
+    const handleAppStateChange = (state) => {
+      if (state.isActive) {
+        console.log("🔄 App Focused: Waking Pulse...");
+        if (socketRef.current && !socketRef.current.connected) {
+          socketRef.current.connect();
+        }
       } else {
+        // We keep the socket alive briefly, but eventually disconnect 
+        // to save the iPhone's battery.
         console.log("💤 App Backgrounded: Sleeping Pulse...");
-        newSocket.disconnect();
       }
     };
 
@@ -86,26 +91,29 @@ export const SocketProvider = ({ children }) => {
     setupLifecycle();
 
     return () => {
-      console.log("🧹 Cleaning up Socket connection...");
+      console.log("🧹 Tearing down Pulse connection...");
       if (appStateListener) {
-        appStateListener.then(l => l.remove());
+        appStateListener.remove();
       }
-      newSocket.removeAllListeners();
-      newSocket.disconnect();
+      if (newSocket) {
+        newSocket.removeAllListeners();
+        newSocket.disconnect();
+      }
       socketRef.current = null;
     };
   }, []); 
 
   return (
     <SocketContext.Provider value={{ socket, isConnected }}>
-      <div className="fixed top-2 right-2 z-[9999] flex items-center gap-2 pointer-events-none select-none">
-        <span className={`w-2 h-2 rounded-full transition-all duration-500 ${
+      {/* 🟢 Connectivity Status Indicator (Fixed to top of screen) */}
+      <div className="fixed top-4 right-4 z-[9999] flex items-center gap-2 pointer-events-none opacity-80 scale-90 sm:scale-100">
+        <div className={`w-2.5 h-2.5 rounded-full transition-all duration-700 ${
           isConnected 
-            ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' 
-            : 'bg-rose-500 shadow-[0_0_8px_#f43f5e] animate-pulse'
+            ? 'bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.8)]' 
+            : 'bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.8)] animate-pulse'
         }`} />
-        <span className="text-[10px] font-bold text-white/40 uppercase tracking-tighter">
-          {isConnected ? 'Pulse Live' : 'Pulse Offline'}
+        <span className="text-[10px] font-black text-white uppercase tracking-widest drop-shadow-md">
+          {isConnected ? 'Pulse Live' : 'Reconnecting...'}
         </span>
       </div>
       {children}

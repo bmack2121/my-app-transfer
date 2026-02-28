@@ -1,17 +1,18 @@
 import axios from 'axios';
 import { hapticWarning, hapticError } from "../utils/haptics";
 
-// ✅ FIX: Safely support both Vite and Create React App environment variables
+// ✅ THE FIX: Swap the local IP fallback for your LIVE Render URL
+const CLOUD_API_URL = "https://autosalespro-backend.onrender.com/api";
+
 const API_URL = 
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL) || 
   (typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_BASE_URL) || 
-  "http://192.168.0.73:5000/api";
+  CLOUD_API_URL;
 
 const axiosClient = axios.create({
   baseURL: API_URL, 
-  timeout: 120000, // 2 minutes: generous for lot acquisitions/photo uploads
+  timeout: 120000, // 2 minutes: essential for uploading high-res vehicle photos to Render
   
-  // Required for maintaining sessions across requests (must match backend CORS)
   withCredentials: true, 
 
   headers: {
@@ -26,15 +27,13 @@ axiosClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
     
-    // Use Axios 1.x compliant header setting
     if (token) {
       config.headers.set('Authorization', `Bearer ${token}`);
     }
 
     // Auto-detect FormData for vehicle photo/video uploads
     if (config.data instanceof FormData) {
-      // Axios automatically calculates the multipart/form-data boundary. 
-      // We MUST delete the manual JSON header so it doesn't overwrite it.
+      // Deleting Content-Type allows Axios to set the multipart boundary correctly
       config.headers.delete("Content-Type");
     }
 
@@ -51,10 +50,10 @@ axiosClient.interceptors.response.use(
   async (error) => {
     const { response, code, config } = error;
 
-    // 1. Handle Connectivity Failures (Physical device range issues on the lot)
+    // 1. Handle Connectivity Failures (Render waking up or 5G/LTE dead zones)
     if (code === "ECONNABORTED" || code === "ERR_NETWORK" || !response) {
-      await hapticWarning().catch(() => {}); // Catch prevents unhandled promise if haptics fail
-      console.error(`🏁 VinPro Sync: Unreachable. Target: ${config?.baseURL}.`);
+      await hapticWarning().catch(() => {}); 
+      console.error(`🏁 VinPro Sync: Cloud Unreachable. Target: ${config?.baseURL}. Render may be warming up.`);
     }
 
     // 2. Handle Unauthorized / Expired Sessions
@@ -62,18 +61,11 @@ axiosClient.interceptors.response.use(
       await hapticError().catch(() => {});
       localStorage.removeItem("token");
 
-      // Use History API for a seamless client-side route change 
-      // instead of window.location.href to prevent a white-screen reload in Capacitor
+      // Seamless navigation to prevent "White Screen" in Capacitor
       if (!window.location.pathname.includes("/login")) {
         window.history.pushState({}, '', '/login?expired=true');
-        // Dispatch a custom event so React Router picks up the change natively
         window.dispatchEvent(new Event('popstate')); 
       }
-    }
-
-    // 3. Handle Bad Requests / Validation Errors
-    if (response?.status === 400) {
-      console.warn("VinPro Engine - Validation Error:", response.data?.message || "Invalid data");
     }
 
     return Promise.reject(error);
