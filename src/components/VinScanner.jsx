@@ -55,13 +55,13 @@ const VinScanner = ({ onDetected }) => {
         driveTrain: data.DriveType,
         fuelType: data.FuelPrimary,
         bodyClass: data.BodyClass,
-        engine: data.DisplacementL 
+        engine: data.DisplacementL
           ? `${data.DisplacementL}L ${data.EngineConfiguration || ''}${data.EngineCylinders || ''}`.trim()
           : data.MotorKW ? `${data.MotorKW}kW Electric` : "Standard Powertrain"
       };
     } catch (error) {
       console.error("NHTSA Lookup failed:", error);
-      return { vin }; 
+      return { vin };
     }
   };
 
@@ -104,8 +104,8 @@ const VinScanner = ({ onDetected }) => {
         }
       });
 
-      // 3. Activate transparency and start feed
-      document.body.classList.add('barcode-scanner-active');
+      // 3. Trigger the CSS hole punch
+      document.body.classList.add('scanner-active');
       setIsScanning(true);
       setStatus("Focus on the Barcode");
       setLoading(false);
@@ -129,7 +129,8 @@ const VinScanner = ({ onDetected }) => {
         await BarcodeScanner.removeAllListeners();
       } catch (e) {}
     }
-    document.body.classList.remove('barcode-scanner-active');
+    // Remove the CSS hole punch class
+    document.body.classList.remove('scanner-active');
     setIsScanning(false);
     setStatus("Ready to scan");
   };
@@ -145,8 +146,8 @@ const VinScanner = ({ onDetected }) => {
     try {
       const image = await Camera.getPhoto({
         quality: 90,
-        width: 1600, 
-        source: CameraSource.Camera, 
+        width: 1600,
+        source: CameraSource.Camera,
         resultType: CameraResultType.Base64,
       });
 
@@ -188,54 +189,69 @@ const VinScanner = ({ onDetected }) => {
   };
 
   return (
-    <div className={`flex flex-col items-center gap-4 w-full max-w-sm mx-auto p-4 ${isScanning ? 'scanner-ui-overlay' : ''}`}>
-      <div className="w-full flex justify-center mb-2">
-        <div className="bg-slate-900 border border-slate-800 text-blue-400 px-6 py-2 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg text-center leading-tight">
-          {status}
+    <div className="w-full max-w-sm mx-auto p-4">
+      {!isScanning ? (
+        <div className="flex flex-col items-center gap-4 w-full">
+          {/* Status Badge (Normal Mode) */}
+          <div className="w-full flex justify-center mb-2">
+            <div className="bg-slate-900 border border-slate-800 text-blue-400 px-6 py-2 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg text-center leading-tight">
+              {status}
+            </div>
+          </div>
+
+          <div className="w-full space-y-3">
+            <button
+              onClick={handleAutoScan}
+              disabled={loading}
+              className={`w-full h-16 rounded-2xl font-black text-xs uppercase tracking-widest text-white shadow-xl transition-all active:scale-95 ${loading ? "bg-slate-800" : "bg-green-600 hover:bg-green-500"}`}
+            >
+              {loading ? "Initializing..." : " Live Barcode Scan"}
+            </button>
+
+            <button
+              onClick={handleManualScan}
+              disabled={loading}
+              className={`w-full h-16 rounded-2xl font-black text-xs uppercase tracking-widest text-white shadow-xl transition-all active:scale-95 ${loading ? "bg-slate-800" : "bg-blue-600 hover:bg-blue-500"}`}
+            >
+              {loading ? "Processing..." : " Manual Snap (OCR)"}
+            </button>
+            
+            <p className="text-[10px] text-slate-500 text-center font-bold px-4 pt-2">
+               Auto-Scan is fastest for barcodes. Use Manual Snap for dashboards or titles.
+            </p>
+          </div>
         </div>
-      </div>
-      
-      {isScanning ? (
-        <div className="flex flex-col items-center justify-between h-[60vh] w-full">
+      ) : (
+        /* 🛑 THE FIX: "fixed inset-0" forces the scanner to ignore the page layout and center perfectly on the screen */
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-between p-10 bg-transparent pointer-events-auto">
+          
+          {/* Floating Status Badge */}
+          <div className="mt-10 w-full flex justify-center">
+            <div className="bg-slate-900/90 backdrop-blur border border-slate-800 text-blue-400 px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-2xl">
+              {status}
+            </div>
+          </div>
+
           {/* Aesthetic Viewfinder Box */}
-          <div className="w-64 h-40 border-2 border-blue-400/30 rounded-lg relative overflow-hidden bg-blue-500/5">
+          <div className="w-72 h-48 border-2 border-blue-400/30 rounded-lg relative overflow-hidden bg-blue-500/10 shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]">
             <div className="scanner-laser"></div>
             
             {/* Viewfinder Corners */}
-            <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-blue-400"></div>
-            <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-blue-400"></div>
-            <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-blue-400"></div>
-            <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-blue-400"></div>
+            <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-blue-400"></div>
+            <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-blue-400"></div>
+            <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-blue-400"></div>
+            <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-blue-400"></div>
           </div>
           
-          <button
-            onClick={stopAutoScan}
-            className="w-full h-14 bg-red-600 rounded-full font-black text-xs uppercase tracking-widest text-white shadow-2xl active:scale-95 transition-transform"
-          >
-            Cancel Scan
-          </button>
-        </div>
-      ) : (
-        <div className="w-full space-y-3">
-          <button
-            onClick={handleAutoScan}
-            disabled={loading}
-            className={`w-full h-16 rounded-2xl font-black text-xs uppercase tracking-widest text-white shadow-xl transition-all active:scale-95 ${loading ? "bg-slate-800" : "bg-green-600 hover:bg-green-500"}`}
-          >
-            {loading ? "Initializing..." : "📡 Live Barcode Scan"}
-          </button>
-
-          <button
-            onClick={handleManualScan}
-            disabled={loading}
-            className={`w-full h-16 rounded-2xl font-black text-xs uppercase tracking-widest text-white shadow-xl transition-all active:scale-95 ${loading ? "bg-slate-800" : "bg-blue-600 hover:bg-blue-500"}`}
-          >
-            {loading ? "Processing..." : "📸 Manual Snap (OCR)"}
-          </button>
-          
-          <p className="text-[10px] text-slate-500 text-center font-bold px-4 pt-2">
-             Auto-Scan is fastest for barcodes. Use Manual Snap for dashboards or titles.
-          </p>
+          {/* Bottom Cancel Button */}
+          <div className="w-full max-w-sm mb-6 flex justify-center">
+            <button
+              onClick={stopAutoScan}
+              className="w-full h-14 bg-red-600 rounded-full font-black text-xs uppercase tracking-widest text-white shadow-2xl active:scale-95 transition-transform"
+            >
+              Cancel Scan
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -83,3 +83,24 @@
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
+
+/* 📸 CAPACITOR CAMERA HOLE PUNCH 📸 */
+/* Must stay at the very bottom to override Tailwind classes */
+html:has(body.scanner-active),
+html:has(body.scanner-active) body,
+body.scanner-active,
+body.scanner-active #root,
+body.scanner-active .bg-slate-950,
+body.scanner-active .bg-slate-900,
+body.scanner-active .bg-slate-800,
+body.scanner-active .main-content,
+body.scanner-active .min-h-screen {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Hide the main UI container so its children don't accidentally block the camera */
+body.scanner-active .main-content > div:not(.fixed) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
