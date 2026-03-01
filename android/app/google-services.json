@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "891301873577",
+    "project_id": "autosalespro-frontend",
+    "storage_bucket": "autosalespro-frontend.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:891301873577:android:b600909643546c575f26b8",
+        "android_client_info": {
+          "package_name": "com.vinpro.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCa4ltKHn07ppSUD-FLw8aHsKSct5wi_-8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
