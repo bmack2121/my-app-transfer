@@ -15,7 +15,7 @@
   "dependencies": {
     "@aparajita/capacitor-biometric-auth": "^10.0.0",
     "@capacitor-mlkit/barcode-scanning": "^8.0.0",
-    "@capacitor/android": "^8.0.0",
+    "@capacitor/android": "^8.1.0",
     "@capacitor/app": "^8.0.0",
     "@capacitor/browser": "^8.0.0",
     "@capacitor/camera": "^8.0.0",
@@ -31,6 +31,7 @@
     "@capacitor/status-bar": "^8.0.0",
     "@capgo/capacitor-navigation-bar": "^8.0.20",
     "@heroicons/react": "2.2.0",
+    "@ionic/pwa-elements": "^3.4.0",
     "@pantrist/capacitor-plugin-ml-kit-text-recognition": "^8.0.0",
     "autoprefixer": "10.4.17",
     "axios": "1.6.0",
@@ -47,6 +48,7 @@
     "react-native-vision-camera": "^4.7.3",
     "react-router-dom": "6.30.3",
     "react-scripts": "5.0.1",
+    "socket.io-client": "^4.8.3",
     "tailwindcss": "3.4.0"
   },
   "devDependencies": {

@@ -85,7 +85,7 @@ const DLScanner = ({ onLeadCaptured }) => {
           className="flex items-center justify-center gap-3 w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold shadow-lg transition-all active:scale-95"
         >
           <UserPlus size={20} />
-           🚀 TEST SCANNER 🚀
+           Scan License to Start Lead
         </button>
       ) : (
         /* The scanner UI overlay */
