@@ -1,0 +1,72 @@
+import { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'com.vinpro.app',
+  appName: 'VinPro',
+  webDir: 'build',
+
+  server: {
+    // 🛑 THE CORD IS CUT: We completely removed the Live Reload `url`.
+    // The app will now boot natively from the physical phone memory.
+   
+    // ✅ Use secure HTTPS for production
+    androidScheme: 'https',
+    iosScheme: 'https',
+   
+    allowNavigation: [
+      // ✅ Allow the app to talk to your live cloud server
+      'autosalespro-backend.onrender.com',
+      '*.chase.com',
+      '*.wellsfargo.com',
+      '*.bankofamerica.com',
+      'github.com'
+    ]
+  },
+
+  android: {
+    buildOptions: {
+      releaseType: 'AAB',
+    },
+    // Turned off for production security since we are using HTTPS now
+    allowMixedContent: false,
+    captureInput: true,
+    backgroundColor: "#020617"
+  },
+
+  ios: {
+    contentInset: 'always',
+    backgroundColor: "#020617"
+  },
+
+  plugins: {
+    BarcodeScanner: {
+      installGoogleBarcodeScannerModule: true,
+    },
+
+    Keyboard: {
+      resize: 'body',
+      style: 'dark',
+    },
+
+    BiometricAuth: {
+      androidBiometryDescription: "Authenticate to access VinPro CRM",
+      androidBiometryTitle: "Biometric Login",
+      androidBiometrySubTitle: "Fingerprint or Face ID",
+      androidBiometryConfirmationRequired: false,
+    },
+
+    SplashScreen: {
+      launchShowDuration: 1500,
+      launchAutoHide: true,
+      backgroundColor: "#020617",
+      showSpinner: true,
+      spinnerColor: "#2563eb",
+      androidScaleType: "CENTER_CROP",
+      splashFullScreen: true,
+      splashImmersive: true,
+    }
+  }
+};
+
+export default config;
+
